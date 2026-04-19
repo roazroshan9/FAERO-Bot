@@ -1,0 +1,212 @@
+const path = require('path');
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+const defaultBotManager = require('../core/botManager');
+const attachSocket = require('./socket');
+
+let lastCpuUsage = process.cpuUsage();
+let lastCpuCheck = Date.now();
+
+function createWebServer(options) {
+  const botManager = options && options.botManager ? options.botManager : defaultBotManager;
+  const app = express();
+  const server = http.createServer(app);
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
+
+  const io = socketIo(server, {
+    transports: ['websocket'],
+    pingInterval: 25000,
+    pingTimeout: 10000,
+    maxHttpBufferSize: 32768,
+    perMessageDeflate: false,
+    httpCompression: false
+  });
+
+  app.disable('x-powered-by');
+  app.use(express.json({ limit: '16kb' }));
+  app.use(express.static(path.join(__dirname, 'public'), {
+    etag: true,
+    maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0
+  }));
+
+  mountRoutes(app, io, botManager);
+  attachSocket(io, botManager);
+
+  return {
+    app,
+    io,
+    server,
+    listen(port) {
+      return new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(port, '0.0.0.0', () => {
+          server.off('error', reject);
+          resolve(server);
+        });
+      });
+    },
+    close(done) {
+      io.close(() => {
+        if (server.listening) {
+          server.close(done);
+        } else if (done) {
+          done();
+        }
+      });
+    }
+  };
+}
+
+function mountRoutes(app, io, botManager) {
+  app.get('/healthz', (req, res) => {
+    res.json({ ok: true, uptime: Math.round(process.uptime()) });
+  });
+
+  app.get('/bot-api/runtime', (req, res) => {
+    res.json(buildRuntimeMetrics(botManager));
+  });
+
+  app.get('/bot-api/config', (req, res) => {
+    res.json(buildConfigSummary(botManager));
+  });
+
+  ['/api/status', '/bot-api/status'].forEach((route) => {
+    app.get(route, (req, res) => {
+      res.json(botManager.getStatus());
+    });
+  });
+
+  ['/api/start', '/bot-api/start'].forEach((route) => {
+    app.post(route, (req, res) => {
+      try {
+        botManager.createBot(req.body || {});
+        res.json({ ok: true, status: botManager.getStatus() });
+      } catch (err) {
+        res.status(400).json({ ok: false, error: err.message });
+      }
+    });
+  });
+
+  ['/api/stop', '/bot-api/stop'].forEach((route) => {
+    app.post(route, (req, res) => {
+      botManager.stop();
+      res.json({ ok: true, status: botManager.getStatus() });
+    });
+  });
+
+  ['/api/command', '/bot-api/command'].forEach((route) => {
+    app.post(route, (req, res) => {
+      try {
+        botManager.runWebCommand(req.body.command, req.body.args || {});
+        res.json({ ok: true, status: botManager.getStatus() });
+      } catch (err) {
+        res.status(400).json({ ok: false, error: err.message });
+      }
+    });
+  });
+
+  app.post('/bot-api/force-cleanup', (req, res) => {
+    botManager._runCleanup();
+    res.json({ ok: true });
+  });
+
+  app.post('/bot-api/ai-mode', (req, res) => {
+    const enabled = Boolean(req.body && req.body.enabled);
+    botManager.setAiMode(enabled);
+    res.json({ ok: true, aiModeEnabled: botManager.aiModeEnabled });
+  });
+
+  app.post('/bot-api/low-power-mode', (req, res) => {
+    const enabled = Boolean(req.body && req.body.enabled);
+    botManager.setLowPowerMode(enabled);
+    res.json({ ok: true, lowPowerMode: botManager.lowPowerMode });
+  });
+
+  app.post('/bot-api/chat', (req, res) => {
+    try {
+      const message = String((req.body && req.body.message) || '').trim();
+      const username = String((req.body && req.body.username) || process.env.AUTHORIZED_USER || 'roaz').trim();
+      if (!message) throw new Error('Chat message cannot be empty');
+      if (username !== (process.env.AUTHORIZED_USER || 'roaz') && !botManager.memory.isTrusted(username)) {
+        throw new Error('Unauthorized chat user');
+      }
+      if (!botManager.bot || !botManager.bot.entity) {
+        throw new Error('Bot is not running or has not spawned yet');
+      }
+      botManager.bot.chat(message);
+      io.emit('chatLog', { username, message });
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+}
+
+function buildConfigSummary(botManager) {
+  return {
+    botTickMs:              readEnvNum('BOT_TICK_MS', 10000),
+    mobScanIntervalMs:      readEnvNum('MOB_SCAN_INTERVAL_MS', 15000),
+    oreScanIntervalMs:      readEnvNum('ORE_SCAN_INTERVAL_MS', 120000),
+    cpuLimitPercent:        readEnvNum('AI_CPU_LIMIT_PERCENT', 30),
+    dangerWatchRange:       readEnvNum('DANGER_WATCH_RANGE', 5),
+    dangerActionIntervalMs: readEnvNum('DANGER_ACTION_INTERVAL_MS', 20000),
+    commandCooldownMs:      botManager.commandCooldownMs,
+    survivalActionIntervalMs:  readEnvNum('SURVIVAL_ACTION_INTERVAL_MS', 45000),
+    resourceActionIntervalMs:  readEnvNum('RESOURCE_ACTION_INTERVAL_MS', 120000),
+    autoCleanupIntervalMs:  readEnvNum('AUTO_CLEANUP_INTERVAL_MS', 300000),
+    memoryCleanupIntervalMs: readEnvNum('MEMORY_CLEANUP_INTERVAL_MS', 60000),
+    maxRestarts:            readEnvNum('BOT_MAX_RESTARTS', 5),
+    maxMemoryMb:            readEnvNum('NODE_MAX_OLD_SPACE_MB', 384)
+  };
+}
+
+function readEnvNum(name, fallback) {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function buildRuntimeMetrics(botManager) {
+  const now = Date.now();
+  const cpu = process.cpuUsage(lastCpuUsage);
+  const elapsedMs = Math.max(1, now - lastCpuCheck);
+  lastCpuUsage = process.cpuUsage();
+  lastCpuCheck = now;
+
+  const memory = process.memoryUsage();
+  const cpuPercent = Math.min(100, Math.max(0, ((cpu.user + cpu.system) / 1000 / elapsedMs) * 100));
+  const supervisor = botManager.processManager && botManager.processManager.getRuntimeSummary
+    ? botManager.processManager.getRuntimeSummary()
+    : { status: 'running', restartCount: 0, recentRestarts: 0, maxRestarts: 0 };
+
+  return {
+    status: supervisor.status,
+    cpuPercent: Math.round(cpuPercent * 10) / 10,
+    ramMb: Math.round(memory.rss / 1024 / 1024),
+    heapMb: Math.round(memory.heapUsed / 1024 / 1024),
+    restartCount: supervisor.restartCount,
+    recentRestarts: supervisor.recentRestarts,
+    maxRestarts: supervisor.maxRestarts,
+    uptimeSeconds: Math.round(process.uptime())
+  };
+}
+
+function startStandalone() {
+  const port = Number(process.env.WEB_PORT || process.env.PORT || 3000);
+  const web = createWebServer({ botManager: defaultBotManager });
+  web.listen(port).then(() => {
+    defaultBotManager.log('Web control panel running on port ' + port);
+  });
+  return web;
+}
+
+if (require.main === module) {
+  startStandalone();
+}
+
+module.exports = {
+  createWebServer,
+  startStandalone,
+  buildRuntimeMetrics
+};

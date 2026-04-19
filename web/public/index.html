@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Minecraft Bot Control Panel</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <div class="scanlines"></div>
+
+    <div id="lock-screen" class="lock-screen">
+      <div class="lock-box glass-panel">
+        <p class="eyebrow">FAERO SYSTEM</p>
+        <h1>Access Gate</h1>
+        <p class="subtitle">Authorization required to open the AI command center.</p>
+        <input type="password" id="pass-input" placeholder="Enter security key">
+        <button id="unlockButton">LOGIN</button>
+        <p id="error-msg">Access denied. Invalid key.</p>
+      </div>
+    </div>
+
+    <main class="shell" id="main-content">
+      <section class="hero glass-panel">
+        <div>
+          <p class="eyebrow">MINEFLAYER AI COMMAND CENTER</p>
+          <h1>Cyber Control Panel</h1>
+          <p class="subtitle">Connect, command, monitor, and steer your Minecraft bot in real time.</p>
+        </div>
+        <div class="status-stack">
+          <div class="status-pill" id="running">OFFLINE</div>
+          <div class="status-pill ai-pill" id="aiModePill">AI: OFF</div>
+          <div class="mini-readout" id="connectionReadout">Awaiting connection</div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="card glass-panel connection-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">LINK</p>
+            <span class="pulse-dot"></span>
+          </div>
+          <h2>Dynamic Connection</h2>
+          <label>Host <input id="host" placeholder="127.0.0.1"></label>
+          <label>Port <input id="port" placeholder="25565" type="number"></label>
+          <label>Username <input id="username" placeholder="AI_Bot"></label>
+          <label>Auth <input id="auth" placeholder="offline"></label>
+          <div class="buttons">
+            <button id="start">Connect</button>
+            <button id="stop" class="danger">Disconnect</button>
+          </div>
+        </div>
+
+        <div class="card glass-panel status-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">TELEMETRY</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <h2>Live Status</h2>
+          <dl class="stats">
+            <div><dt>Health</dt><dd id="health">-</dd></div>
+            <div><dt>Hunger</dt><dd id="hunger">-</dd></div>
+            <div><dt>Position</dt><dd id="position">-</dd></div>
+            <div><dt>State</dt><dd id="state">idle</dd></div>
+          </dl>
+        </div>
+
+        <div class="card wide glass-panel runtime-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">LIGHTWEIGHT RUNTIME</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <h2>Resource Dashboard</h2>
+          <p class="chat-help">Basic metrics only, refreshed slowly to avoid extra load.</p>
+          <dl class="stats runtime-stats">
+            <div><dt>CPU</dt><dd id="cpuUsage">-</dd></div>
+            <div><dt>RAM</dt><dd id="ramUsage">-</dd></div>
+            <div><dt>Status</dt><dd id="runtimeStatus">-</dd></div>
+            <div><dt>Restarts</dt><dd id="restartCount">0</dd></div>
+          </dl>
+          <div class="control-row low-power-row">
+            <button id="aiModeToggle" class="ai-mode-off">AI Mode: OFF</button>
+            <button id="lowPowerToggle" class="low-power-off">Low Power Mode: OFF</button>
+            <button id="forceCleanup" class="cleanup-btn">Force Cleanup</button>
+          </div>
+        </div>
+
+        <div class="card wide glass-panel advanced-panel">
+          <div class="advanced-header">
+            <div>
+              <p class="eyebrow">MANUAL OVERRIDE</p>
+              <h2>Game Controller + Chat</h2>
+              <p class="chat-help">Hold movement keys for continuous movement. Release to stop. Chat accepts messages and commands.</p>
+            </div>
+          </div>
+
+          <div class="controller-chat-layout">
+            <section class="movement-panel" aria-label="Movement Pad">
+              <div class="movement-pad">
+                <button class="move-button forward" data-move="forward" aria-label="Move forward">↑</button>
+                <button class="move-button left" data-move="left" aria-label="Move left">←</button>
+                <button class="move-button right" data-move="right" aria-label="Move right">→</button>
+                <button class="move-button back" data-move="back" aria-label="Move back">↓</button>
+              </div>
+              <div class="action-buttons">
+                <button class="move-button jump-button" data-move="jump" aria-label="Jump">JUMP</button>
+                <button class="move-button stop-button" data-move="stop" aria-label="Stop">STOP</button>
+                <button class="move-button click-button" data-action="left_click">HIT NPC</button>
+                <button class="move-button click-button" data-action="right_click">TALK NPC</button>
+              </div>
+            </section>
+
+            <section class="controller-chat glass-panel inner-panel">
+              <h3>Chat System</h3>
+              <div id="chatMessages" class="chat-messages"></div>
+              <form id="chatForm" class="chat-form">
+                <input id="chatInput" autocomplete="off" placeholder="follow me / collect food / hello world">
+                <button id="chatSend" type="submit">Send</button>
+              </form>
+            </section>
+          </div>
+        </div>
+
+        <div class="card wide glass-panel command-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">COMMAND SHORTCUTS</p>
+            <span class="pulse-dot"></span>
+          </div>
+          <h2>Quick Actions</h2>
+          <div class="control-row">
+            <button data-command="follow">Follow</button>
+            <button data-command="come">Come Here</button>
+            <button data-command="stop">Stop Action</button>
+            <button data-command="collect_food">Collect Food</button>
+          </div>
+          <div class="control-row">
+            <input id="target" placeholder="player target">
+            <button id="attack">Attack Safe Target</button>
+          </div>
+          <div class="control-row">
+            <input id="x" placeholder="x" type="number">
+            <input id="y" placeholder="y" type="number">
+            <input id="z" placeholder="z" type="number">
+            <button id="go">Go To Coords</button>
+          </div>
+          <div class="control-row">
+            <input id="block" placeholder="block name, e.g. iron_ore">
+            <button id="mineBlock">Mine Block</button>
+          </div>
+          <div class="control-row">
+            <input id="payPlayer" placeholder="player">
+            <input id="payAmount" placeholder="amount" type="number">
+            <button id="pay">Pay</button>
+          </div>
+        </div>
+
+        <div class="card wide glass-panel decision-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">AI CORE</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <h2>AI Decision</h2>
+          <pre id="thought">state: idle
+reason: waiting</pre>
+        </div>
+
+        <div class="card wide glass-panel config-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">ACTIVE CONFIGURATION</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <div class="config-header-row">
+            <h2>Live Config</h2>
+            <button id="refreshConfig" class="config-refresh-btn">Refresh</button>
+          </div>
+          <p class="chat-help">Values read from environment at startup. Click Refresh after changing env vars.</p>
+          <div class="config-groups">
+            <div class="config-group">
+              <p class="config-group-label">AI ENGINE</p>
+              <dl class="config-stats">
+                <div><dt>Tick Rate</dt><dd id="cfg-tickMs">-</dd></div>
+                <div><dt>Mob Scan</dt><dd id="cfg-mobScanMs">-</dd></div>
+                <div><dt>Ore Scan</dt><dd id="cfg-oreScanMs">-</dd></div>
+                <div><dt>CPU Limit</dt><dd id="cfg-cpuLimit">-</dd></div>
+              </dl>
+            </div>
+            <div class="config-group">
+              <p class="config-group-label">SAFETY</p>
+              <dl class="config-stats">
+                <div><dt>Danger Range</dt><dd id="cfg-dangerRange">-</dd></div>
+                <div><dt>Danger CD</dt><dd id="cfg-dangerActionMs">-</dd></div>
+              </dl>
+            </div>
+            <div class="config-group">
+              <p class="config-group-label">COMMANDS & SURVIVAL</p>
+              <dl class="config-stats">
+                <div><dt>Cmd Cooldown</dt><dd id="cfg-cmdCooldown">-</dd></div>
+                <div><dt>Survival</dt><dd id="cfg-survivalMs">-</dd></div>
+                <div><dt>Resource</dt><dd id="cfg-resourceMs">-</dd></div>
+              </dl>
+            </div>
+            <div class="config-group">
+              <p class="config-group-label">SYSTEM</p>
+              <dl class="config-stats">
+                <div><dt>Mem Limit</dt><dd id="cfg-maxMemMb">-</dd></div>
+                <div><dt>Max Restarts</dt><dd id="cfg-maxRestarts">-</dd></div>
+                <div><dt>Mem Cleanup</dt><dd id="cfg-memCleanupMs">-</dd></div>
+                <div><dt>Auto Cleanup</dt><dd id="cfg-autoCleanupMs">-</dd></div>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <div class="card wide glass-panel logs-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">EVENT STREAM</p>
+            <span class="pulse-dot"></span>
+          </div>
+          <h2>Logs</h2>
+          <div id="logs" class="logs"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/client.js"></script>
+  </body>
+</html>
