@@ -101,7 +101,14 @@ function mountRoutes(app, io, botManager) {
   ['/api/command', '/bot-api/command'].forEach((route) => {
     app.post(route, (req, res) => {
       try {
-        botManager.runWebCommand(req.body.command, req.body.args || {});
+        const command = String((req.body && req.body.command) || '').trim();
+        const args = req.body && req.body.args;
+        if (!command) throw new Error('Command name is required');
+        if (botManager.commands.has(command)) {
+          botManager.executeCommand(command, Array.isArray(args) ? args : []);
+        } else {
+          botManager.runWebCommand(command, args && !Array.isArray(args) ? args : {});
+        }
         res.json({ ok: true, status: botManager.getStatus() });
       } catch (err) {
         res.status(400).json({ ok: false, error: err.message });

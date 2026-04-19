@@ -37,7 +37,47 @@ class BotManager extends EventEmitter {
     this._dangerWatchTimer = null;
     this.lastCommandAt = 0;
     this.commandCooldownMs = readPositiveInt(process.env.COMMAND_COOLDOWN_MS, 2000);
+    this.commands = new Map();
+    this.loadCommands();
     this.bindCoreEvents();
+  }
+
+  loadCommands() {
+    const fs = require('fs');
+    const path = require('path');
+    const dir = path.join(__dirname, '..', 'commands');
+    if (!fs.existsSync(dir)) return;
+    let loaded = 0;
+    fs.readdirSync(dir)
+      .filter((f) => f.endsWith('.js'))
+      .forEach((f) => {
+        try {
+          const cmd = require(path.join(dir, f));
+          if (cmd && cmd.name && typeof cmd.execute === 'function') {
+            this.commands.set(cmd.name, cmd);
+            loaded++;
+          }
+        } catch (err) {
+          this.emit('log', { at: new Date().toISOString(), message: '[commands] Failed to load ' + f + ': ' + err.message });
+        }
+      });
+    if (loaded > 0) {
+      this.emit('log', { at: new Date().toISOString(), message: '[commands] Loaded ' + loaded + ' command(s): ' + Array.from(this.commands.keys()).join(', ') });
+    }
+  }
+
+  executeCommand(commandName, args) {
+    const cmd = this.commands.get(commandName);
+    if (!cmd) {
+      const msg = '[commands] Unknown command: ' + commandName;
+      this.log(msg);
+      throw new Error('Command not found: ' + commandName);
+    }
+    if (!this.bot || !this.bot.entity) {
+      throw new Error('Bot is not running or has not spawned yet');
+    }
+    this.log('[commands] Executing: ' + commandName + (args && args.length ? ' ' + args.join(' ') : ''));
+    cmd.execute(this.bot, Array.isArray(args) ? args : []);
   }
 
   bindCoreEvents() {
