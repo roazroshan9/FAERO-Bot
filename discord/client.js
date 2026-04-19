@@ -1,44 +1,53 @@
 /**
  * DiscordBridge — Discord bot integration for FAERO Minecraft Bot
  *
- * Prefix : !bot <command>
- * Security: Per-user rate limiting enforced on every command.
- * Compliance: No unauthorized network access. Commands map 1-to-1 with
- *   legitimate mineflayer gameplay actions only.
+ * Prefix  : !bot <command>
+ * Security: RBAC tier check before every command.
+ *           Per-user rate limit (DISCORD_RATE_LIMIT_MS, default 3 s).
+ * Compliance: No unauthorized network access. All actions map to legitimate
+ *   mineflayer gameplay only. Personal, non-commercial use. See README.md.
  *
- * Personal, non-commercial use only. See README.md.
+ * RBAC tiers (from config/roles.js)
+ *   OWNER  — full access, role management, resource admin
+ *   MOD    — help, status, health, logs
+ *   NONE   — blocked with a clear denial message
  */
 
 'use strict';
 
 const { Client, GatewayIntentBits, Events, EmbedBuilder } = require('discord.js');
+const roles = require('../config/roles');
 
 const PREFIX = '!bot';
-
-// Per-user cooldown between Discord commands (ms). Prevents spam and keeps
-// bot activity within Minecraft server anti-cheat tolerances.
 const DISCORD_RATE_LIMIT_MS = Number(process.env.DISCORD_RATE_LIMIT_MS) || 3000;
 
 class DiscordBridge {
   constructor(botManager) {
     this.botManager = botManager;
-    this.client = null;
+    this.client     = null;
     this.logChannelId = process.env.DISCORD_LOG_CHANNEL_ID || null;
-    this.guildId = process.env.DISCORD_GUILD_ID || null;
+    this.guildId      = process.env.DISCORD_GUILD_ID       || null;
     this._logListener = null;
-    // userId → timestamp of last accepted command
-    this._userCooldowns = new Map();
-    // Reference to the resource monitor (set by app.js after construction)
-    this._monitor = null;
+    this._userCooldowns = new Map();   // userId → last-command timestamp
+    this._monitor       = null;        // set by app.js after construction
   }
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   start() {
     const token = process.env.DISCORD_TOKEN;
     if (!token) {
       console.log('[discord] DISCORD_TOKEN not set — Discord bridge disabled');
       return;
+    }
+
+    if (!roles.getConfig().ownerDiscordId) {
+      console.warn(
+        '[discord] WARNING: OWNER_DISCORD_ID is not set. ' +
+        'All Discord commands are blocked until you add this secret. ' +
+        'Get your ID from Discord → Settings → Advanced → Developer Mode, ' +
+        'then right-click your username → Copy User ID.'
+      );
     }
 
     this.client = new Client({
@@ -59,9 +68,9 @@ class DiscordBridge {
       if (!message.content.startsWith(PREFIX)) return;
       if (this.guildId && message.guildId !== this.guildId) return;
 
-      // ── Per-user rate limit ──────────────────────────────────────────────
+      // ── Rate limit ─────────────────────────────────────────────────────
       const userId = message.author.id;
-      const now = Date.now();
+      const now    = Date.now();
       const lastAt = this._userCooldowns.get(userId) || 0;
       const elapsed = now - lastAt;
       if (elapsed < DISCORD_RATE_LIMIT_MS) {
@@ -93,18 +102,16 @@ class DiscordBridge {
     }
   }
 
-  // ── Public: send an alert to the log channel ──────────────────────────────
-  // Used by the resource monitor and other system events.
+  // ── Alert broadcast (used by resource monitor) ─────────────────────────────
 
   sendAlert(message) {
-    if (!this.client || !this.client.isReady()) return;
-    if (!this.logChannelId) return;
+    if (!this.client || !this.client.isReady() || !this.logChannelId) return;
     const ch = this.client.channels.cache.get(this.logChannelId);
     if (!ch || !ch.isTextBased()) return;
     ch.send('⚠️ **FAERO ALERT:** ' + message).catch(() => {});
   }
 
-  // ── Internal: forward bot logs to the log channel ─────────────────────────
+  // ── Log forwarding ────────────────────────────────────────────────────────
 
   _forwardLog(entry) {
     if (!this.logChannelId || !this.client || !this.client.isReady()) return;
@@ -114,56 +121,85 @@ class DiscordBridge {
     ch.send('`' + ts + '` ' + entry.message).catch(() => {});
   }
 
-  // ── Command handler ───────────────────────────────────────────────────────
+  // ── RBAC middleware + dispatcher ──────────────────────────────────────────
 
   _handleMessage(message) {
-    const raw = message.content.slice(PREFIX.length).trim();
+    const raw   = message.content.slice(PREFIX.length).trim();
     const parts = raw.split(/\s+/);
-    const cmd = (parts[0] || 'help').toLowerCase();
-    const args = parts.slice(1);
-    const bm = this.botManager;
+    const cmd   = (parts[0] || 'help').toLowerCase();
+    const args  = parts.slice(1);
+    const bm    = this.botManager;
+    const userId = message.author.id;
 
-    const reply = (text) => message.reply(text).catch(() => {});
+    const reply      = (text)  => message.reply(text).catch(() => {});
     const replyEmbed = (embed) => message.reply({ embeds: [embed] }).catch(() => {});
+
+    // ── RBAC gate ──────────────────────────────────────────────────────────
+    const userTier = roles.getDiscordTier(userId);
+
+    if (!roles.canDiscord(userId, cmd)) {
+      if (userTier === roles.TIERS.NONE) {
+        const cfg = roles.getConfig();
+        const hint = cfg.ownerDiscordId
+          ? 'You are not in the FAERO role list. Ask the owner to add you.'
+          : '`OWNER_DISCORD_ID` is not configured — RBAC is not active yet.';
+        return reply('🚫 **Access Denied** — ' + hint);
+      }
+      return reply(
+        '🔒 **Permission Denied** — `' + PREFIX + ' ' + cmd + '` requires **Owner** access.\n' +
+        'Your role: **' + roles.tierName(userTier) + '**'
+      );
+    }
+
+    // ── Commands ───────────────────────────────────────────────────────────
 
     switch (cmd) {
 
-      // ── Help ──────────────────────────────────────────────────────────────
+      // ── Help ───────────────────────────────────────────────────────────
       case 'help': {
+        const isMod = userTier === roles.TIERS.MOD;
         const embed = new EmbedBuilder()
           .setColor(0x39FF14)
-          .setTitle('FAERO Bot — Command Reference')
+          .setTitle('FAERO Bot — Commands  [Role: ' + roles.tierName(userTier) + ']')
           .setDescription('Prefix: `' + PREFIX + ' <command>`')
           .addFields(
-            { name: '`status`',          value: 'Full bot status report',           inline: true },
-            { name: '`health`',          value: 'Health & hunger only',             inline: true },
-            { name: '`resources`',       value: 'CPU/RAM usage report',             inline: true },
-            { name: '`connect`',         value: 'Connect to Minecraft server',      inline: true },
-            { name: '`disconnect`',      value: 'Disconnect bot',                   inline: true },
-            { name: '`follow`',          value: 'Follow the authorized player',     inline: true },
-            { name: '`stop`',            value: 'Stop current action',              inline: true },
-            { name: '`go <x> <y> <z>`', value: 'Navigate to coordinates',          inline: true },
-            { name: '`ai on|off`',       value: 'Toggle AI brain',                  inline: true },
-            { name: '`logs [n]`',        value: 'Show last n log lines (max 10)',   inline: true }
-          )
-          .setFooter({ text: 'FAERO Minecraft AI • Personal use only' });
+            { name: '`status`',    value: 'Full bot status',            inline: true },
+            { name: '`health`',    value: 'HP & hunger',                inline: true },
+            { name: '`logs [n]`',  value: 'Last n log lines (max 10)',  inline: true }
+          );
+        if (!isMod) {
+          embed.addFields(
+            { name: '`resources`',         value: 'RAM / uptime report',         inline: true },
+            { name: '`connect`',           value: 'Connect to Minecraft',        inline: true },
+            { name: '`disconnect`',        value: 'Disconnect bot',              inline: true },
+            { name: '`follow`',            value: 'Follow authorized player',    inline: true },
+            { name: '`stop`',              value: 'Stop current action',         inline: true },
+            { name: '`go <x> <y> <z>`',   value: 'Navigate to coordinates',     inline: true },
+            { name: '`ai on|off`',         value: 'Toggle AI brain',             inline: true },
+            { name: '`roles`',             value: 'View RBAC config',            inline: true },
+            { name: '`add-mod <id>`',      value: 'Add Discord moderator',       inline: true },
+            { name: '`remove-mod <id>`',   value: 'Remove Discord moderator',    inline: true },
+            { name: '`add-mcmod <name>`',  value: 'Add MC moderator',            inline: true },
+            { name: '`remove-mcmod <n>`',  value: 'Remove MC moderator',         inline: true },
+            { name: '`reload`',            value: 'Reload roles from file',      inline: true }
+          );
+        }
+        embed.setFooter({ text: 'FAERO Minecraft AI • Personal use only' });
         return replyEmbed(embed);
       }
 
-      // ── Status ────────────────────────────────────────────────────────────
+      // ── Status ─────────────────────────────────────────────────────────
       case 'status': {
-        const s = bm.getStatus();
-        const pos = s.position
-          ? s.position.x + ', ' + s.position.y + ', ' + s.position.z
-          : 'unknown';
+        const s   = bm.getStatus();
+        const pos = s.position ? s.position.x + ', ' + s.position.y + ', ' + s.position.z : 'unknown';
         const embed = new EmbedBuilder()
           .setColor(s.running ? 0x39FF14 : 0xFF315F)
           .setTitle('Bot Status')
           .addFields(
             { name: '🟢 Online',    value: s.running ? 'Yes' : 'No',        inline: true },
             { name: '👤 Username',  value: s.username || '-',                inline: true },
-            { name: '❤️ Health',    value: String(s.health ?? '-'),          inline: true },
-            { name: '🍖 Hunger',    value: String(s.hunger ?? '-'),          inline: true },
+            { name: '❤️ Health',    value: String(s.health  ?? '-'),         inline: true },
+            { name: '🍖 Hunger',    value: String(s.hunger  ?? '-'),         inline: true },
             { name: '📍 Position',  value: pos,                              inline: true },
             { name: '⚡ State',     value: s.state ? s.state.state : 'idle', inline: true },
             { name: '🤖 AI Mode',   value: s.aiModeEnabled ? 'ON' : 'OFF',  inline: true },
@@ -173,15 +209,25 @@ class DiscordBridge {
         return replyEmbed(embed);
       }
 
-      // ── Health ────────────────────────────────────────────────────────────
+      // ── Health ─────────────────────────────────────────────────────────
       case 'health': {
         const s = bm.getStatus();
-        return reply(
-          '❤️ Health: **' + (s.health ?? '-') + '** | 🍖 Hunger: **' + (s.hunger ?? '-') + '**'
-        );
+        return reply('❤️ Health: **' + (s.health ?? '-') + '** | 🍖 Hunger: **' + (s.hunger ?? '-') + '**');
       }
 
-      // ── Resource monitor ──────────────────────────────────────────────────
+      // ── Logs ───────────────────────────────────────────────────────────
+      case 'logs': {
+        const n = Math.min(10, Math.max(1, parseInt(args[0], 10) || 5));
+        const entries = bm.logs.slice(-n);
+        if (!entries.length) return reply('No logs yet.');
+        const lines = entries.map((e) => {
+          const ts = new Date(e.at).toLocaleTimeString('en-GB', { hour12: false });
+          return '`' + ts + '` ' + e.message;
+        });
+        return reply(lines.join('\n'));
+      }
+
+      // ── Resources ──────────────────────────────────────────────────────
       case 'resources':
       case 'mem':
       case 'memory': {
@@ -197,18 +243,18 @@ class DiscordBridge {
           .setColor(pct >= 90 ? 0xFF315F : pct >= 70 ? 0xFFAA00 : 0x39FF14)
           .setTitle('Resource Monitor')
           .addFields(
-            { name: '💾 Heap Used', value: stats.heapMB + ' MB',                      inline: true },
-            { name: '📊 Heap Limit', value: stats.limitMB + ' MB',                    inline: true },
-            { name: '🧠 RSS',        value: stats.rssMB + ' MB',                       inline: true },
-            { name: '⏱ Uptime',     value: stats.uptimeMin + ' min',                  inline: true },
-            { name: '📈 Usage',      value: bar + ' ' + pct + '%',                    inline: false }
+            { name: '💾 Heap Used',  value: stats.heapMB + ' MB',   inline: true },
+            { name: '📊 Heap Limit', value: stats.limitMB + ' MB',  inline: true },
+            { name: '🧠 RSS',        value: stats.rssMB + ' MB',    inline: true },
+            { name: '⏱ Uptime',     value: stats.uptimeMin + ' min', inline: true },
+            { name: '📈 Usage',      value: bar + ' ' + pct + '%',  inline: false }
           )
           .setFooter({ text: 'Auto-disconnect triggers at ' + stats.limitMB + ' MB heap' })
           .setTimestamp();
         return replyEmbed(embed);
       }
 
-      // ── Connect ───────────────────────────────────────────────────────────
+      // ── Connect / Disconnect ────────────────────────────────────────────
       case 'connect': {
         bm.createBot()
           .then(() => reply('✅ Bot connecting to **' + (process.env.MC_HOST || 'localhost') + '**…'))
@@ -216,36 +262,30 @@ class DiscordBridge {
         return;
       }
 
-      // ── Disconnect ────────────────────────────────────────────────────────
       case 'disconnect': {
         bm.stop();
         return reply('🔌 Bot disconnected.');
       }
 
-      // ── Follow ────────────────────────────────────────────────────────────
+      // ── Follow / Stop ───────────────────────────────────────────────────
       case 'follow': {
         if (!bm.bot) return reply('❌ Bot is offline.');
         try {
           bm.runWebCommand('follow', {});
           reply('👟 Following ' + (process.env.AUTHORIZED_USER || 'roaz') + '…');
-        } catch (err) {
-          reply('❌ ' + err.message);
-        }
+        } catch (err) { reply('❌ ' + err.message); }
         return;
       }
 
-      // ── Stop ──────────────────────────────────────────────────────────────
       case 'stop': {
         try {
           bm.runWebCommand('stop', {});
           reply('⛔ Bot stopped.');
-        } catch (err) {
-          reply('❌ ' + err.message);
-        }
+        } catch (err) { reply('❌ ' + err.message); }
         return;
       }
 
-      // ── Go to coords ──────────────────────────────────────────────────────
+      // ── Go to coords ────────────────────────────────────────────────────
       case 'go': {
         const [x, y, z] = args.map(Number);
         if ([x, y, z].some((n) => !Number.isFinite(n))) {
@@ -254,29 +294,82 @@ class DiscordBridge {
         try {
           bm.runWebCommand('go', { x, y, z });
           reply('🧭 Moving to **' + x + ', ' + y + ', ' + z + '**');
-        } catch (err) {
-          reply('❌ ' + err.message);
-        }
+        } catch (err) { reply('❌ ' + err.message); }
         return;
       }
 
-      // ── AI mode ───────────────────────────────────────────────────────────
+      // ── AI mode ─────────────────────────────────────────────────────────
       case 'ai': {
         const on = (args[0] || '').toLowerCase() === 'on';
         bm.setAiMode(on);
         return reply('🤖 AI mode: **' + (on ? 'ON' : 'OFF') + '**');
       }
 
-      // ── Logs ──────────────────────────────────────────────────────────────
-      case 'logs': {
-        const n = Math.min(10, Math.max(1, parseInt(args[0], 10) || 5));
-        const entries = bm.logs.slice(-n);
-        if (!entries.length) return reply('No logs yet.');
-        const lines = entries.map((e) => {
-          const ts = new Date(e.at).toLocaleTimeString('en-GB', { hour12: false });
-          return '`' + ts + '` ' + e.message;
-        });
-        return reply(lines.join('\n'));
+      // ── RBAC: View roles ────────────────────────────────────────────────
+      case 'roles': {
+        const cfg = roles.getConfig();
+        const embed = new EmbedBuilder()
+          .setColor(0x39FF14)
+          .setTitle('FAERO — RBAC Role Config')
+          .addFields(
+            { name: '👑 Owner Discord ID', value: cfg.ownerDiscordId || '*(not set — set OWNER_DISCORD_ID secret)*', inline: false },
+            { name: '⚔️ Owner MC Name',    value: cfg.ownerMcName,                                                   inline: false },
+            { name: '🛡 Mod Discord IDs',  value: cfg.modDiscordIds.join('\n') || '*(none)*',                        inline: false },
+            { name: '🛡 Mod MC Names',     value: cfg.modMcNames.join(', ')   || '*(none)*',                        inline: false }
+          )
+          .setFooter({ text: 'Use add-mod / remove-mod to update. Changes apply instantly.' });
+        return replyEmbed(embed);
+      }
+
+      // ── RBAC: Reload ────────────────────────────────────────────────────
+      case 'reload': {
+        roles.reloadRoles();
+        bm.log('[rbac] Role config reloaded by ' + message.author.tag);
+        return reply('✅ Role config reloaded from file. Changes are now active.');
+      }
+
+      // ── RBAC: Add Discord moderator ─────────────────────────────────────
+      case 'add-mod': {
+        const targetId = args[0] ? args[0].replace(/[<@!>]/g, '') : null;
+        if (!targetId) return reply('❌ Usage: `' + PREFIX + ' add-mod <userId>` (or @mention)');
+        const cfg = roles.getConfig();
+        if (cfg.modDiscordIds.includes(targetId)) return reply('ℹ️ `' + targetId + '` is already a moderator.');
+        roles.saveOverrides({ modDiscordIds: [...cfg.modDiscordIds, targetId] });
+        bm.log('[rbac] Discord mod added: ' + targetId + ' by ' + message.author.tag);
+        return reply('✅ Added Discord moderator: `' + targetId + '`\nThey now have access to: status, health, logs, help.');
+      }
+
+      // ── RBAC: Remove Discord moderator ──────────────────────────────────
+      case 'remove-mod': {
+        const targetId = args[0] ? args[0].replace(/[<@!>]/g, '') : null;
+        if (!targetId) return reply('❌ Usage: `' + PREFIX + ' remove-mod <userId>` (or @mention)');
+        const cfg = roles.getConfig();
+        if (!cfg.modDiscordIds.includes(targetId)) return reply('ℹ️ `' + targetId + '` is not a moderator.');
+        roles.saveOverrides({ modDiscordIds: cfg.modDiscordIds.filter(id => id !== targetId) });
+        bm.log('[rbac] Discord mod removed: ' + targetId + ' by ' + message.author.tag);
+        return reply('✅ Removed Discord moderator: `' + targetId + '`');
+      }
+
+      // ── RBAC: Add MC moderator ──────────────────────────────────────────
+      case 'add-mcmod': {
+        const name = args[0];
+        if (!name) return reply('❌ Usage: `' + PREFIX + ' add-mcmod <MinecraftUsername>`');
+        const cfg = roles.getConfig();
+        if (cfg.modMcNames.includes(name)) return reply('ℹ️ `' + name + '` is already an MC moderator.');
+        roles.saveOverrides({ modMcNames: [...cfg.modMcNames, name] });
+        bm.log('[rbac] MC mod added: ' + name + ' by ' + message.author.tag);
+        return reply('✅ Added MC moderator: `' + name + '`\nThey can now use: !help !status !follow !come in-game.');
+      }
+
+      // ── RBAC: Remove MC moderator ───────────────────────────────────────
+      case 'remove-mcmod': {
+        const name = args[0];
+        if (!name) return reply('❌ Usage: `' + PREFIX + ' remove-mcmod <MinecraftUsername>`');
+        const cfg = roles.getConfig();
+        if (!cfg.modMcNames.includes(name)) return reply('ℹ️ `' + name + '` is not an MC moderator.');
+        roles.saveOverrides({ modMcNames: cfg.modMcNames.filter(n => n !== name) });
+        bm.log('[rbac] MC mod removed: ' + name + ' by ' + message.author.tag);
+        return reply('✅ Removed MC moderator: `' + name + '`');
       }
 
       default:
