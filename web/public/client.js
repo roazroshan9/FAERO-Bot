@@ -222,6 +222,11 @@ function unlockPanel() {
   } else {
     els.errorMsg.classList.add('visible');
     els.passInput.value = '';
+    const lockBox = document.querySelector('.lock-box');
+    lockBox.classList.remove('shake');
+    void lockBox.offsetWidth;
+    lockBox.classList.add('shake');
+    lockBox.addEventListener('animationend', () => lockBox.classList.remove('shake'), { once: true });
   }
 }
 
@@ -257,14 +262,28 @@ async function fetchRuntimeMetrics() {
 }
 
 function renderRuntimeMetrics(metrics) {
+  const cpuBox = els.cpuUsage.parentElement;
+  const ramBox = els.ramUsage.parentElement;
+
   if (!metrics) {
     els.cpuUsage.textContent = '-';
     els.ramUsage.textContent = '-';
     els.runtimeStatus.textContent = 'unavailable';
+    cpuBox.classList.remove('runtime-stat-alert');
+    ramBox.classList.remove('runtime-stat-alert');
     return;
   }
-  els.cpuUsage.textContent = value(metrics.cpuPercent) + '%';
-  els.ramUsage.textContent = value(metrics.ramMb) + ' MB';
+
+  const cpuPct = Number(metrics.cpuPercent) || 0;
+  const ramMb  = Number(metrics.ramMb)      || 0;
+  const cpuAlert = cpuPct > 80;
+  const ramAlert = ramMb  > 300;
+
+  cpuBox.classList.toggle('runtime-stat-alert', cpuAlert);
+  ramBox.classList.toggle('runtime-stat-alert', ramAlert);
+
+  els.cpuUsage.textContent = (cpuAlert ? '⚠ ' : '') + value(metrics.cpuPercent) + '%';
+  els.ramUsage.textContent = (ramAlert ? '⚠ ' : '') + value(metrics.ramMb) + ' MB';
   els.runtimeStatus.textContent = formatRuntimeStatus(metrics.status);
   els.restartCount.textContent = value(metrics.restartCount);
 }
@@ -380,6 +399,13 @@ function appendLog(entry) {
   els.logs.scrollTop = els.logs.scrollHeight;
 }
 
+function classifyLog(message) {
+  const m = String(message || '').toLowerCase();
+  if (/error|fail|kick|disconnect|crash|died|exception/.test(m)) return 'log-msg--error';
+  if (/warn|alert|monitor|timeout|exceeded|limit|memory/.test(m)) return 'log-msg--warning';
+  return 'log-msg--success';
+}
+
 function appendLogLineOnly(entry) {
   const line = document.createElement('div');
   line.className = 'log-line';
@@ -387,6 +413,7 @@ function appendLogLineOnly(entry) {
   time.className = 'time';
   time.textContent = new Date(entry.at).toLocaleTimeString();
   const msg = document.createElement('span');
+  msg.className = classifyLog(entry.message);
   msg.textContent = entry.message;
   line.appendChild(time);
   line.appendChild(msg);
