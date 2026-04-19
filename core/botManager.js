@@ -119,6 +119,15 @@ class BotManager extends EventEmitter {
   bindBotEvents(bot) {
     bot.once('spawn', async () => {
       this.log('Spawned in world');
+
+      if (process.env.MC_PASSWORD) {
+        await new Promise(r => setTimeout(r, 2000));
+        if (bot && bot.entity) {
+          bot.chat('/login ' + process.env.MC_PASSWORD);
+          this.log('Auto-login command sent');
+        }
+      }
+
       await survival.configure(bot);
       this.stateManager.reset('spawned');
       this.startBrain();

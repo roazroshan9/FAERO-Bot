@@ -19,4 +19,15 @@ export MEMORY_MAX_PAYMENTS="${MEMORY_MAX_PAYMENTS:-50}"
 export MEMORY_MAX_FACTS="${MEMORY_MAX_FACTS:-50}"
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=${NODE_MAX_OLD_SPACE_MB:-384}}"
 
+# Minecraft connection — override via Replit Secrets
+export MC_HOST="${MC_HOST:-localhost}"
+export MC_PORT="${MC_PORT:-25565}"
+export MC_USERNAME="${MC_USERNAME:-AI_Bot}"
+export MC_AUTH="${MC_AUTH:-offline}"
+# MC_PASSWORD and MC_VERSION come directly from Replit Secrets — no default
+
+# Bot behaviour
+export AUTHORIZED_USER="${AUTHORIZED_USER:-roaz}"
+export PVP_ENABLED="${PVP_ENABLED:-true}"
+
 exec node app.js

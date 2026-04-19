@@ -63,3 +63,6 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
+AUTHORIZED_USER = "roaz"
+PVP_ENABLED = "true"
+AUTO_START_BOT = "false"

@@ -13,6 +13,7 @@
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "dependencies": {
+    "discord.js": "^14.26.3",
     "express": "^5.2.1",
     "mineflayer": "^4.33.0",
     "mineflayer-armor-manager": "^2.0.1",
