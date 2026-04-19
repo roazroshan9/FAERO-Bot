@@ -1,46 +1,51 @@
+'use strict';
+
 /**
  * ResourceMonitor — Self-monitoring module for FAERO Minecraft Bot
  *
- * Purpose: Tracks process memory usage and enforces safe resource limits
- * to prevent Replit from suspending the repl due to excessive consumption.
+ * Tracks process heap memory AND CPU usage.
+ * If SAFE_HEAP_MB is exceeded the bot auto-disconnects and fires a Discord alert.
+ * CPU usage is sampled on every check interval and exposed in getStats().
  *
  * This module performs NO network scanning, NO packet manipulation, and
  * NO activity that would violate Replit's Terms of Service. All monitoring
- * is strictly local (process.memoryUsage) and read-only.
+ * is strictly local (process.memoryUsage / process.cpuUsage) and read-only.
  *
  * Personal, non-commercial use only. See README.md.
  */
 
-'use strict';
-
 const EventEmitter = require('events');
 
-// ─── Configurable Thresholds ──────────────────────────────────────────────────
-// SAFE_HEAP_MB  — heap usage (MB) that triggers auto-disconnect & Discord alert.
-//                 Replit free tier containers typically have ~512 MB available;
-//                 default is 400 MB to leave a 100 MB safety margin.
-const SAFE_HEAP_MB      = Number(process.env.SAFE_HEAP_MB)      || 400;
+// ── Configurable thresholds ────────────────────────────────────────────────────
+const SAFE_HEAP_MB        = Number(process.env.SAFE_HEAP_MB)        || 400;
 const MONITOR_INTERVAL_MS = Number(process.env.MONITOR_INTERVAL_MS) || 30000;
 
 // Action-rate window: max bot actions per time window (anti-spam / anti-cheat
 // compliance — avoids triggering server-side rate limits).
-const ACTION_WINDOW_MS    = 10000;
+const ACTION_WINDOW_MS       = 10000;
 const MAX_ACTIONS_PER_WINDOW = Number(process.env.MAX_ACTIONS_PER_WINDOW) || 15;
 
 class ResourceMonitor extends EventEmitter {
   constructor(botManager) {
     super();
     this.botManager = botManager;
-    this._timer = null;
-    this._alerted = false;
-    this._recoveryTimer = null;
+    this._timer          = null;
+    this._alerted        = false;
+    this._recoveryTimer  = null;
     this._actionTimestamps = [];
+
+    // CPU tracking
+    this._cpuUsageSnapshot  = null;  // last process.cpuUsage() sample
+    this._cpuSampledAt      = 0;
+    this._cpuPercent        = 0;
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────
 
   start() {
     if (this._timer) return;
+    this._cpuUsageSnapshot = process.cpuUsage();
+    this._cpuSampledAt     = Date.now();
     this._timer = setInterval(() => this._check(), MONITOR_INTERVAL_MS);
     this.botManager.log(
       '[monitor] Started — heap limit: ' + SAFE_HEAP_MB + 'MB' +
@@ -50,7 +55,7 @@ class ResourceMonitor extends EventEmitter {
   }
 
   stop() {
-    if (this._timer) { clearInterval(this._timer); this._timer = null; }
+    if (this._timer)         { clearInterval(this._timer);       this._timer = null; }
     if (this._recoveryTimer) { clearTimeout(this._recoveryTimer); this._recoveryTimer = null; }
   }
 
@@ -66,13 +71,31 @@ class ResourceMonitor extends EventEmitter {
     return true;
   }
 
+  // ── CPU sample ─────────────────────────────────────────────────────────────
+
+  _sampleCpu() {
+    const now     = Date.now();
+    const elapsed = Math.max(1, now - this._cpuSampledAt);
+    const prev    = this._cpuUsageSnapshot || process.cpuUsage();
+    const delta   = process.cpuUsage(prev);
+    // delta.user + delta.system are in microseconds
+    const cpuMs   = (delta.user + delta.system) / 1000;
+    this._cpuPercent       = Math.min(100, Math.max(0, Math.round((cpuMs / elapsed) * 100)));
+    this._cpuUsageSnapshot = process.cpuUsage();
+    this._cpuSampledAt     = now;
+    return this._cpuPercent;
+  }
+
   // ── Resource check ──────────────────────────────────────────────────────────
 
   _check() {
-    const stats = this.getStats();
+    const cpuPct = this._sampleCpu();
+    const stats  = this.getStats();
+
     this.botManager.log(
       '[monitor] Heap: ' + stats.heapMB + '/' + SAFE_HEAP_MB + 'MB' +
       ' | RSS: ' + stats.rssMB + 'MB' +
+      ' | CPU: ' + cpuPct + '%' +
       ' | Uptime: ' + stats.uptimeMin + 'min'
     );
 
@@ -90,7 +113,7 @@ class ResourceMonitor extends EventEmitter {
 
       // Allow re-alert after 60 s if memory remains high
       this._recoveryTimer = setTimeout(() => {
-        this._alerted = false;
+        this._alerted      = false;
         this._recoveryTimer = null;
       }, 60000);
     }
@@ -101,10 +124,11 @@ class ResourceMonitor extends EventEmitter {
   getStats() {
     const mem = process.memoryUsage();
     return {
-      heapMB:    Math.round(mem.heapUsed   / 1024 / 1024),
-      rssMB:     Math.round(mem.rss        / 1024 / 1024),
-      limitMB:   SAFE_HEAP_MB,
-      uptimeMin: Math.round(process.uptime() / 60)
+      heapMB:     Math.round(mem.heapUsed / 1024 / 1024),
+      rssMB:      Math.round(mem.rss      / 1024 / 1024),
+      limitMB:    SAFE_HEAP_MB,
+      cpuPercent: this._cpuPercent,
+      uptimeMin:  Math.round(process.uptime() / 60)
     };
   }
 }

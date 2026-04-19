@@ -47,6 +47,9 @@ const DISCORD_PERMISSIONS = Object.freeze({
   resources:     TIERS.OWNER,
   mem:           TIERS.OWNER,
   memory:        TIERS.OWNER,
+  // Plugin management — OWNER only
+  plugins:       TIERS.OWNER,
+  plugin:        TIERS.OWNER,
   // Role management — OWNER only
   roles:         TIERS.OWNER,
   reload:        TIERS.OWNER,

@@ -4,7 +4,15 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
-A standalone CommonJS JavaScript AI Minecraft bot project has been added at the repository root. It uses Mineflayer plugins for pathfinding, block collection, PvP, armor management, auto-eating, and tool selection, plus Express and Socket.IO for a browser control panel.
+A standalone CommonJS JavaScript AI Minecraft bot (FAERO) has been added at the repository root. It uses a modular plugin architecture with Mineflayer plugins for pathfinding, block collection, PvP, armor management, auto-eating, and tool selection, plus Express and Socket.IO for a browser control panel, and a Discord bridge with RBAC and rate limiting.
+
+## FAERO Bot Architecture
+
+- **Plugin system**: `core/pluginLoader.js` — auto-discovers `plugins/*.plugin.js`
+- **Built-in plugins**: `plugins/ai.plugin.js`, `plugins/combat.plugin.js`, `plugins/navigation.plugin.js`
+- **Self-monitoring**: `core/monitor.js` tracks heap MB + CPU % and auto-disconnects on SAFE_HEAP_MB breach
+- **Rate limiting**: per-user + global sliding-window bucket in `discord/client.js`
+- **RBAC**: `config/roles.js` — OWNER / MOD / NONE tiers for Discord and in-game commands
 
 ## Stack
 

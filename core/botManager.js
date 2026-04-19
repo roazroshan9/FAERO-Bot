@@ -1,19 +1,21 @@
 const EventEmitter = require('events');
-const mineflayer = require('mineflayer');
+const path         = require('path');
+const mineflayer   = require('mineflayer');
 const { SocksClient } = require('socks');
-const pathfinderPlugin = require('mineflayer-pathfinder').pathfinder;
+const pathfinderPlugin   = require('mineflayer-pathfinder').pathfinder;
 const collectBlockPlugin = require('mineflayer-collectblock').plugin;
-const pvpPlugin = require('mineflayer-pvp').plugin;
+const pvpPlugin          = require('mineflayer-pvp').plugin;
 const armorManagerPlugin = require('mineflayer-armor-manager');
-const autoEatPlugin = require('mineflayer-auto-eat').loader;
-const toolPlugin = require('mineflayer-tool').plugin;
-const TaskQueue = require('./taskQueue');
-const Memory = require('./memory');
+const autoEatPlugin      = require('mineflayer-auto-eat').loader;
+const toolPlugin         = require('mineflayer-tool').plugin;
+const TaskQueue    = require('./taskQueue');
+const Memory       = require('./memory');
 const { StateManager, STATES } = require('./stateManager');
-const Brain = require('../ai/brain');
-const survival = require('../modules/survival');
-const commands = require('../modules/commands');
-const combat = require('../modules/combat');
+const PluginLoader = require('./pluginLoader');
+const Brain        = require('../ai/brain');
+const survival     = require('../modules/survival');
+const commands     = require('../modules/commands');
+const combat       = require('../modules/combat');
 
 class BotManager extends EventEmitter {
   constructor() {
@@ -38,6 +40,14 @@ class BotManager extends EventEmitter {
     this.lastCommandAt = 0;
     this.commandCooldownMs = readPositiveInt(process.env.COMMAND_COOLDOWN_MS, 2000);
     this.commands = new Map();
+    // ── Plugin system ─────────────────────────────────────────────────────────
+    this.pluginLoader = new PluginLoader();
+    const pluginsDir = path.join(__dirname, '..', 'plugins');
+    const loaded = this.pluginLoader.loadAll(pluginsDir);
+    if (loaded > 0) {
+      const names = this.pluginLoader.list().map((p) => p.name).join(', ');
+      this.emit('log', { at: new Date().toISOString(), message: '[pluginLoader] Loaded ' + loaded + ' plugin(s): ' + names });
+    }
     this.loadCommands();
     this.bindCoreEvents();
   }
@@ -191,6 +201,10 @@ class BotManager extends EventEmitter {
   startBrain() {
     this.stopBrain();
     if (!this.aiModeEnabled) return;
+    if (!this.pluginLoader.isEnabled('ai')) {
+      this.log('[pluginLoader] AI plugin is disabled — brain not started');
+      return;
+    }
     this.brain = new Brain(this.getContext());
     this.brain.on('thought', (payload) => {
       this.emit('thought', payload);
@@ -232,6 +246,10 @@ class BotManager extends EventEmitter {
 
   startDangerWatch(bot) {
     this._stopDangerWatch();
+    if (!this.pluginLoader.isEnabled('combat')) {
+      this.log('[pluginLoader] Combat plugin is disabled — danger watch not started');
+      return;
+    }
     const DANGER_RANGE = readPositiveInt(process.env.DANGER_WATCH_RANGE, 5);
     const POLL_MS = 2000;
     this._dangerWatchTimer = setInterval(() => {
@@ -432,9 +450,10 @@ class BotManager extends EventEmitter {
         username: this.lastConnectionOptions.username,
         auth: this.lastConnectionOptions.auth
       } : null,
-      queue: this.taskQueue.snapshot(),
-      memory: this.memory.snapshot(),
-      logs: this.logs.slice(-100)
+      queue:   this.taskQueue.snapshot(),
+      memory:  this.memory.snapshot(),
+      plugins: this.pluginLoader.list(),
+      logs:    this.logs.slice(-100)
     };
   }
 
