@@ -34,8 +34,14 @@ function getTarget(bot, username) {
 
 function handleChat(ctx, username, message) {
   if (username === ctx.bot.username) return false;
-  if (!isAuthorized(username, ctx.memory)) return false;
-  return handleCommand(ctx, username, message);
+  const raw = String(message || '');
+  if (!raw.startsWith('!')) return false;
+  if (!isAuthorized(username, ctx.memory)) {
+    ctx.bot.chat(username + ', you are not authorized to control me.');
+    return false;
+  }
+  const body = raw.slice(1).trim();
+  return handleCommand(ctx, username, body);
 }
 
 function handleCommand(ctx, username, message) {
@@ -80,7 +86,7 @@ function handleCommand(ctx, username, message) {
   // 🟢 MOVEMENT
   // -----------------
 
-  if (text === 'follow me') {
+  if (text === 'follow me' || text === 'follow') {
     return commandTask('follow', async () => {
       const target = getTarget(bot, username);
       if (!target) return;
@@ -91,7 +97,7 @@ function handleCommand(ctx, username, message) {
     });
   }
 
-  if (text === 'come here') {
+  if (text === 'come here' || text === 'come') {
     return commandTask('come here', async () => {
       const target = getTarget(bot, username);
       if (!target) return;
@@ -119,7 +125,7 @@ function handleCommand(ctx, username, message) {
   // 📍 GO TO
   // -----------------
 
-  let match = text.match(/^go to (-?\d+) (-?\d+) (-?\d+)$/);
+  let match = text.match(/^go(?: to)? (-?\d+) (-?\d+) (-?\d+)$/);
   if (match) {
     return commandTask('go to', async () => {
       bot.chat("Moving...");
