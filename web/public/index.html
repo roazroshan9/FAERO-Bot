@@ -211,6 +211,38 @@ reason: waiting</pre>
           </div>
         </div>
 
+        <div class="card wide glass-panel inventory-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">STORAGE</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <div class="inv-header-row">
+            <h2>Bot Inventory</h2>
+            <span id="invItemCount" class="inv-item-count">—</span>
+          </div>
+          <div id="invOfflineMsg" class="inv-offline-msg">BOT OFFLINE — Connect the bot to view inventory</div>
+          <div id="invContainer" class="inv-container inv-hidden">
+            <div class="inv-section">
+              <p class="inv-section-label">ARMOR</p>
+              <div id="invArmor" class="inv-armor-row"></div>
+            </div>
+            <div class="inv-section">
+              <p class="inv-section-label">MAIN INVENTORY</p>
+              <div id="invMain" class="inv-grid"></div>
+            </div>
+            <div class="inv-section inv-bottom-section">
+              <div>
+                <p class="inv-section-label">HOTBAR</p>
+                <div id="invHotbar" class="inv-grid inv-hotbar-grid"></div>
+              </div>
+              <div>
+                <p class="inv-section-label">OFFHAND</p>
+                <div id="invOffhand" class="inv-grid"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="card wide glass-panel diagnostics-panel">
           <div class="panel-title-row">
             <p class="eyebrow">NETWORK</p>

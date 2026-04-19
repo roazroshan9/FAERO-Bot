@@ -126,6 +126,10 @@ function mountRoutes(app, io, botManager) {
     res.json({ ok: true, lowPowerMode: botManager.lowPowerMode });
   });
 
+  app.get('/bot-api/inventory', (req, res) => {
+    res.json(botManager.getInventory());
+  });
+
   app.post('/bot-api/diagnostics', async (req, res) => {
     const host = String((req.body && req.body.host) || '').trim();
     const port = Number((req.body && req.body.port) || 25565);

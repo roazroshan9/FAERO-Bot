@@ -77,7 +77,9 @@ class BotManager extends EventEmitter {
       this.stateManager.reset('spawned');
       this.startBrain();
       this.startDangerWatch(bot);
+      this.attachInventoryEvents(bot);
       this.emit('bot', this.getStatus());
+      this.emit('inventory', this.getInventory());
     });
 
     bot.on('chat', (username, message) => {
@@ -208,6 +210,33 @@ class BotManager extends EventEmitter {
     }
     this.log('Low power mode: ' + (this.lowPowerMode ? 'ON' : 'OFF'));
     this.emit('bot', this.getStatus());
+  }
+
+  attachInventoryEvents(bot) {
+    if (bot._webInventoryBridgeAttached) return;
+    bot._webInventoryBridgeAttached = true;
+    bot.inventory.on('updateSlot', () => {
+      this.emit('inventory', this.getInventory());
+    });
+  }
+
+  getInventory() {
+    const bot = this.bot;
+    if (!bot || !bot.inventory) return { ok: false, slots: [] };
+    const slots = [];
+    for (let i = 0; i <= 45; i++) {
+      const item = bot.inventory.slots[i];
+      if (item) {
+        slots.push({
+          slot: i,
+          name: item.name,
+          displayName: item.displayName || item.name,
+          count: item.count,
+          stackSize: item.stackSize || 64
+        });
+      }
+    }
+    return { ok: true, slots };
   }
 
   startAutoCleanup() {

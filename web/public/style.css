@@ -827,6 +827,213 @@ pre {
   }
 }
 
+/* ── Bot Inventory Panel ─────────────────────────────────────── */
+.inventory-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.inv-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inv-header-row h2 {
+  margin: 0;
+}
+
+.inv-item-count {
+  font-size: 0.72rem;
+  color: var(--cyan);
+  letter-spacing: 0.1em;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.inv-offline-msg {
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(255, 49, 95, 0.08);
+  border: 1px solid rgba(255, 49, 95, 0.28);
+  color: rgba(255, 150, 170, 0.85);
+  text-align: center;
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+.inv-container {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.inv-hidden {
+  display: none !important;
+}
+
+.inv-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inv-section-label {
+  margin: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: rgba(0, 255, 255, 0.45);
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.inv-bottom-section {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.inv-bottom-section > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inv-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.inv-armor-row {
+  display: flex;
+  gap: 5px;
+}
+
+.inv-hotbar-grid {
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  border-radius: 12px;
+  padding: 6px;
+  background: rgba(0, 255, 0, 0.04);
+  box-shadow: 0 0 14px rgba(0, 255, 0, 0.12);
+}
+
+.inv-slot {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 255, 255, 0.16);
+  cursor: default;
+  overflow: visible;
+  flex-shrink: 0;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.inv-slot:hover {
+  border-color: rgba(0, 255, 255, 0.55);
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.22);
+  z-index: 10;
+}
+
+.inv-slot-filled {
+  border-color: rgba(0, 255, 255, 0.3);
+}
+
+.inv-hotbar-slot {
+  border-color: rgba(0, 255, 0, 0.38);
+}
+
+.inv-hotbar-slot.inv-slot-filled {
+  border-color: rgba(0, 255, 0, 0.6);
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.22);
+}
+
+.inv-armor-slot {
+  border-color: rgba(170, 170, 200, 0.38);
+}
+
+.inv-armor-slot.inv-slot-filled {
+  border-color: rgba(170, 170, 220, 0.7);
+  box-shadow: 0 0 8px rgba(170, 170, 220, 0.2);
+}
+
+.inv-item-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 4px;
+  image-rendering: pixelated;
+  border-radius: 9px;
+}
+
+.inv-abbr {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.66rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  letter-spacing: -0.03em;
+  border-radius: 9px;
+}
+
+.inv-count {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 0.6rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.7);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.inv-tip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(2, 10, 12, 0.96);
+  border: 1px solid rgba(0, 255, 255, 0.45);
+  color: #cffff7;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 20;
+  box-shadow: 0 0 14px rgba(0, 255, 255, 0.25), 0 4px 18px rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.04em;
+}
+
+.inv-slot:hover .inv-tip {
+  display: block;
+}
+
+@media (max-width: 560px) {
+  .inv-slot {
+    width: 42px;
+    height: 42px;
+  }
+
+  .inv-bottom-section {
+    flex-direction: column;
+  }
+}
+
 /* ── Connection Diagnostics Panel ───────────────────────────── */
 .diagnostics-panel {
   display: flex;

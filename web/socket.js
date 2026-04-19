@@ -6,6 +6,7 @@ function attachSocket(io, botManager) {
   io.on('connection', (socket) => {
     socket.emit('status', botManager.getStatus());
     socket.emit('thought', buildThoughtPayload(botManager, null));
+    socket.emit('inventory', botManager.getInventory());
     socket.on('start', (options) => {
       try {
         const connection = normalizeConnectionOptions(options);
@@ -102,7 +103,11 @@ function attachSocket(io, botManager) {
   });
 
   botManager.on('log', (entry) => io.emit('log', entry));
-  botManager.on('bot', (status) => io.emit('status', status));
+  botManager.on('bot', (status) => {
+    io.emit('status', status);
+    io.emit('inventory', botManager.getInventory());
+  });
+  botManager.on('inventory', (data) => io.emit('inventory', data));
   botManager.on('state', () => {
     io.emit('status', botManager.getStatus());
     io.emit('thought', buildThoughtPayload(botManager, null));

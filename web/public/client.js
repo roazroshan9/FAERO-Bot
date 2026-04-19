@@ -391,6 +391,117 @@ function formatRuntimeStatus(status) {
   return String(status || 'running').replace(/_/g, ' ');
 }
 
+socket.on('inventory', renderInventory);
+
+const invOfflineMsg = document.getElementById('invOfflineMsg');
+const invContainer = document.getElementById('invContainer');
+const invItemCount = document.getElementById('invItemCount');
+
+function renderInventory(data) {
+  if (!data || !data.ok) {
+    invOfflineMsg.style.display = 'block';
+    invContainer.classList.add('inv-hidden');
+    invItemCount.textContent = '—';
+    return;
+  }
+
+  invOfflineMsg.style.display = 'none';
+  invContainer.classList.remove('inv-hidden');
+
+  const slotMap = {};
+  (data.slots || []).forEach((item) => { slotMap[item.slot] = item; });
+
+  const totalItems = data.slots.reduce((sum, item) => sum + item.count, 0);
+  invItemCount.textContent = data.slots.length + ' types · ' + totalItems + ' items';
+
+  buildSlots(document.getElementById('invArmor'), [5, 6, 7, 8], slotMap, 'inv-armor-slot');
+  buildSlots(document.getElementById('invMain'), range(9, 35), slotMap);
+  buildSlots(document.getElementById('invHotbar'), range(36, 44), slotMap, 'inv-hotbar-slot');
+  buildSlots(document.getElementById('invOffhand'), [45], slotMap);
+}
+
+function range(start, end) {
+  const arr = [];
+  for (let i = start; i <= end; i++) arr.push(i);
+  return arr;
+}
+
+function buildSlots(container, slotNums, slotMap, extraClass) {
+  container.innerHTML = '';
+  slotNums.forEach((num) => {
+    container.appendChild(makeSlot(slotMap[num] || null, num, extraClass));
+  });
+}
+
+function makeSlot(item, slotNum, extraClass) {
+  const el = document.createElement('div');
+  el.className = 'inv-slot' + (item ? ' inv-slot-filled' : '') + (extraClass ? ' ' + extraClass : '');
+  el.dataset.slot = slotNum;
+
+  if (item) {
+    const img = document.createElement('img');
+    img.className = 'inv-item-icon';
+    img.alt = item.displayName;
+    img.src = 'https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.20.1/assets/minecraft/textures/item/' + item.name + '.png';
+    img.onerror = function() {
+      this.onerror = null;
+      this.src = 'https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.20.1/assets/minecraft/textures/block/' + item.name + '.png';
+      this.onerror = function() {
+        this.style.display = 'none';
+        const abbr = el.querySelector('.inv-abbr');
+        if (abbr) abbr.style.display = 'flex';
+      };
+    };
+
+    const abbr = document.createElement('div');
+    abbr.className = 'inv-abbr';
+    abbr.style.display = 'none';
+    abbr.style.background = itemColor(item.name);
+    abbr.textContent = itemAbbr(item.name);
+
+    const count = document.createElement('span');
+    count.className = 'inv-count';
+    if (item.count > 1) count.textContent = item.count;
+
+    const tip = document.createElement('div');
+    tip.className = 'inv-tip';
+    tip.textContent = item.displayName + (item.count > 1 ? ' ×' + item.count : '');
+
+    el.appendChild(img);
+    el.appendChild(abbr);
+    el.appendChild(count);
+    el.appendChild(tip);
+  }
+
+  return el;
+}
+
+function itemAbbr(name) {
+  return name.split('_').map((w) => w[0] ? w[0].toUpperCase() : '').join('').slice(0, 3) || '?';
+}
+
+function itemColor(name) {
+  if (/sword|axe|pickaxe|shovel|hoe/.test(name)) return 'rgba(68,136,255,0.7)';
+  if (/helmet|chestplate|leggings|boots/.test(name)) return 'rgba(170,170,200,0.7)';
+  if (/diamond/.test(name)) return 'rgba(85,255,255,0.7)';
+  if (/gold|golden/.test(name)) return 'rgba(255,170,0,0.7)';
+  if (/iron/.test(name)) return 'rgba(170,170,170,0.7)';
+  if (/netherite/.test(name)) return 'rgba(90,60,50,0.7)';
+  if (/apple|bread|steak|beef|carrot|potato|chicken|fish|food|mushroom/.test(name)) return 'rgba(136,255,68,0.7)';
+  if (/wood|log|plank|oak|spruce|birch|jungle|acacia|dark/.test(name)) return 'rgba(196,162,103,0.7)';
+  if (/stone|cobble|granite|diorite|andesite/.test(name)) return 'rgba(136,136,136,0.7)';
+  if (/arrow|bow/.test(name)) return 'rgba(200,153,68,0.7)';
+  if (/potion|bottle/.test(name)) return 'rgba(153,68,255,0.7)';
+  if (/emerald/.test(name)) return 'rgba(0,255,136,0.7)';
+  if (/redstone|tnt|fire/.test(name)) return 'rgba(255,50,50,0.7)';
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  const r = 80 + ((h >> 16) & 0x7f);
+  const g = 80 + ((h >> 8) & 0x7f);
+  const b = 80 + (h & 0x7f);
+  return 'rgba(' + r + ',' + g + ',' + b + ',0.7)';
+}
+
 const diagHostInput = document.getElementById('diagHost');
 const diagPortInput = document.getElementById('diagPort');
 const runDiagBtn = document.getElementById('runDiagnostics');
