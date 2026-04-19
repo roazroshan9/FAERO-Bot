@@ -8,12 +8,12 @@
   --black: #0a0a0a;
   --panel: rgba(8, 22, 24, 0.58);
   --panel-strong: rgba(2, 12, 14, 0.78);
-  --green: #00ff00;
+  --green: #39FF14;
   --cyan: #00ffff;
   --red: #ff315f;
   --muted: #75a8a8;
   --line: rgba(0, 255, 255, 0.22);
-  --glow-green: 0 0 14px rgba(0, 255, 0, 0.5), 0 0 44px rgba(0, 255, 0, 0.18);
+  --glow-green: 0 0 14px rgba(57, 255, 20, 0.5), 0 0 44px rgba(57, 255, 20, 0.18);
   --glow-cyan: 0 0 14px rgba(0, 255, 255, 0.5), 0 0 44px rgba(0, 255, 255, 0.18);
 }
 
@@ -629,11 +629,11 @@ pre {
 @keyframes breatheGreen {
   0%, 100% {
     opacity: 0.75;
-    box-shadow: 0 0 8px rgba(0, 255, 0, 0.45), 0 0 30px rgba(0, 255, 0, 0.12);
+    box-shadow: 0 0 8px rgba(57, 255, 20, 0.45), 0 0 30px rgba(57, 255, 20, 0.12);
   }
   50% {
     opacity: 1;
-    box-shadow: 0 0 18px rgba(0, 255, 0, 0.86), 0 0 58px rgba(0, 255, 0, 0.28);
+    box-shadow: 0 0 18px rgba(57, 255, 20, 0.86), 0 0 58px rgba(57, 255, 20, 0.28);
   }
 }
 
@@ -653,7 +653,7 @@ pre {
     border-color: rgba(0, 255, 255, 0.16);
   }
   50% {
-    border-color: rgba(0, 255, 0, 0.3);
+    border-color: rgba(57, 255, 20, 0.3);
   }
 }
 
@@ -1244,6 +1244,166 @@ pre {
   .diag-port-input {
     max-width: 100%;
     flex: 1 1 100%;
+  }
+}
+
+/* ── Skeleton Loaders ────────────────────────────────────────── */
+@keyframes skeletonShimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+
+.skeleton-line {
+  display: inline-block;
+  width: 60%;
+  height: 1em;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 255, 255, 0.06) 25%,
+    rgba(57, 255, 20, 0.14) 50%,
+    rgba(0, 255, 255, 0.06) 75%
+  );
+  background-size: 800px 100%;
+  animation: skeletonShimmer 1.6s infinite linear;
+  vertical-align: middle;
+}
+
+/* ── Retry Connection Button ─────────────────────────────────── */
+.retry-btn {
+  background: linear-gradient(135deg, rgba(255, 180, 0, 0.18), rgba(255, 120, 0, 0.12));
+  color: #ffcc44;
+  border-color: rgba(255, 180, 0, 0.45);
+  box-shadow: 0 0 14px rgba(255, 160, 0, 0.22);
+}
+
+.retry-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(255, 200, 0, 0.28), rgba(255, 140, 0, 0.2));
+  border-color: rgba(255, 200, 0, 0.7);
+  box-shadow: 0 0 22px rgba(255, 180, 0, 0.4);
+}
+
+.retry-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.retry-btn.retrying {
+  animation: breatheAmber 1.2s ease-in-out infinite;
+}
+
+@keyframes breatheAmber {
+  0%, 100% { box-shadow: 0 0 10px rgba(255, 160, 0, 0.3); }
+  50%       { box-shadow: 0 0 28px rgba(255, 200, 0, 0.65); }
+}
+
+/* ── Waypoint Buttons ────────────────────────────────────────── */
+.waypoint-row {
+  margin-top: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.waypoint-save-btn {
+  background: linear-gradient(135deg, rgba(57, 255, 20, 0.16), rgba(0, 200, 60, 0.1));
+  color: var(--green);
+  border-color: rgba(57, 255, 20, 0.45);
+  box-shadow: 0 0 12px rgba(57, 255, 20, 0.18);
+}
+
+.waypoint-save-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(57, 255, 20, 0.26), rgba(0, 200, 60, 0.18));
+  box-shadow: 0 0 22px rgba(57, 255, 20, 0.4);
+}
+
+.waypoint-return-btn {
+  background: linear-gradient(135deg, rgba(0, 200, 255, 0.16), rgba(0, 100, 200, 0.1));
+  color: var(--cyan);
+  border-color: rgba(0, 200, 255, 0.45);
+  box-shadow: 0 0 12px rgba(0, 200, 255, 0.18);
+}
+
+.waypoint-return-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(0, 220, 255, 0.26), rgba(0, 120, 220, 0.18));
+  box-shadow: 0 0 22px rgba(0, 220, 255, 0.4);
+}
+
+.waypoint-return-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.waypoint-readout {
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Mobile-first landscape grid ────────────────────────────── */
+@media (max-width: 860px) and (orientation: landscape) {
+  .shell {
+    width: min(100% - 16px, 1240px);
+    padding: 12px 0;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    padding: 16px 20px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .wide {
+    grid-column: 1 / -1;
+  }
+
+  .card {
+    padding: 16px;
+    border-radius: 20px;
+    margin-top: 0;
+  }
+
+  h1 {
+    font-size: clamp(22px, 4vw, 40px);
+  }
+
+  h2 {
+    font-size: clamp(16px, 2.5vw, 24px);
+    margin-bottom: 12px;
+  }
+
+  .movement-pad {
+    grid-template-columns: repeat(3, minmax(54px, 1fr));
+    grid-template-rows: repeat(3, 54px);
+    max-width: 220px;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .runtime-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  pre,
+  .logs,
+  .chat-messages {
+    min-height: 120px;
+    max-height: 220px;
   }
 }
 

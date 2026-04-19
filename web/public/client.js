@@ -4,6 +4,10 @@ const socket = io({
   timeout: 10000
 });
 
+const MAX_LOG_ENTRIES = 100;
+let _savedWaypoint = null;
+let _statusRefreshTimer = null;
+
 const els = {
   running: document.getElementById('running'),
   health: document.getElementById('health'),
@@ -193,7 +197,16 @@ socket.on('errorMessage', (message) => {
 });
 
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && panelUnlocked) fetchRuntimeMetrics();
+  if (document.hidden) {
+    socket.disconnect();
+    if (_statusRefreshTimer) { clearInterval(_statusRefreshTimer); _statusRefreshTimer = null; }
+  } else {
+    socket.connect();
+    if (panelUnlocked) {
+      fetchRuntimeMetrics();
+      startStatusRefresh();
+    }
+  }
 });
 
 function unlockPanel() {
@@ -204,11 +217,25 @@ function unlockPanel() {
     els.errorMsg.classList.remove('visible');
     panelUnlocked = true;
     startRuntimeMetrics();
+    startStatusRefresh();
     fetchConfig();
   } else {
     els.errorMsg.classList.add('visible');
     els.passInput.value = '';
   }
+}
+
+function startStatusRefresh() {
+  if (_statusRefreshTimer) return;
+  _statusRefreshTimer = setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const res = await fetch('/bot-api/status', { cache: 'no-store' });
+      if (!res.ok) throw new Error('status fetch failed');
+      renderStatus(await res.json());
+    } catch (_e) {
+    }
+  }, 3000);
 }
 
 function startRuntimeMetrics() {
@@ -291,6 +318,11 @@ document.getElementById('refreshConfig').addEventListener('click', () => {
   fetchConfig();
 });
 
+function clearSkeletons(ddEl) {
+  const sk = ddEl.querySelector('.skeleton-line');
+  if (sk) sk.remove();
+}
+
 function renderStatus(status) {
   if (typeof status.aiModeEnabled === 'boolean' && status.aiModeEnabled !== aiModeEnabled) {
     aiModeEnabled = status.aiModeEnabled;
@@ -300,10 +332,12 @@ function renderStatus(status) {
     lowPowerMode = status.lowPowerMode;
     updateLowPowerButton(lowPowerMode);
   }
+  [els.health, els.hunger, els.position, els.state].forEach(clearSkeletons);
   els.running.textContent = status.running ? 'ONLINE' : 'OFFLINE';
   els.running.classList.toggle('online', Boolean(status.running));
   els.health.textContent = value(status.health);
   els.hunger.textContent = value(status.hunger);
+  if (status.position) _currentBotPosition = status.position;
   els.position.textContent = status.position ? status.position.x + ', ' + status.position.y + ', ' + status.position.z : '-';
   els.state.textContent = status.state ? status.state.reason || status.state.state : 'idle';
   els.connectionReadout.textContent = status.running && status.username ? 'Connected as ' + status.username : 'Awaiting connection';
@@ -357,6 +391,9 @@ function appendLogLineOnly(entry) {
   line.appendChild(time);
   line.appendChild(msg);
   els.logs.appendChild(line);
+  while (els.logs.children.length > MAX_LOG_ENTRIES) {
+    els.logs.removeChild(els.logs.firstChild);
+  }
 }
 
 function appendChatLog(data) {
@@ -504,6 +541,47 @@ function itemColor(name) {
   const b = 80 + (h & 0x7f);
   return 'rgba(' + r + ',' + g + ',' + b + ',0.7)';
 }
+
+let _currentBotPosition = null;
+
+document.getElementById('retryConnect').addEventListener('click', async () => {
+  const btn = document.getElementById('retryConnect');
+  btn.disabled = true;
+  btn.classList.add('retrying');
+  btn.textContent = 'Retrying…';
+  try {
+    const res = await fetch('/bot-api/reconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    const data = await res.json();
+    appendLog({ at: new Date().toISOString(), message: data.ok ? 'Reconnect requested.' : 'Reconnect failed: ' + (data.error || 'unknown error') });
+  } catch (err) {
+    appendLog({ at: new Date().toISOString(), message: 'Retry error: ' + err.message });
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('retrying');
+    btn.textContent = 'Retry Connection';
+  }
+});
+
+document.getElementById('saveWaypoint').addEventListener('click', () => {
+  if (!_currentBotPosition) {
+    appendLog({ at: new Date().toISOString(), message: 'No position available — connect the bot first.' });
+    return;
+  }
+  _savedWaypoint = { x: _currentBotPosition.x, y: _currentBotPosition.y, z: _currentBotPosition.z };
+  const readout = document.getElementById('waypointReadout');
+  readout.textContent = 'WP: ' + Math.round(_savedWaypoint.x) + ', ' + Math.round(_savedWaypoint.y) + ', ' + Math.round(_savedWaypoint.z);
+  document.getElementById('returnWaypoint').disabled = false;
+  appendLog({ at: new Date().toISOString(), message: 'Waypoint saved: ' + readout.textContent });
+});
+
+document.getElementById('returnWaypoint').addEventListener('click', () => {
+  if (!_savedWaypoint) return;
+  socket.emit('command', {
+    command: 'go',
+    args: { x: _savedWaypoint.x, y: _savedWaypoint.y, z: _savedWaypoint.z }
+  });
+  appendLog({ at: new Date().toISOString(), message: 'Returning to waypoint: ' + Math.round(_savedWaypoint.x) + ', ' + Math.round(_savedWaypoint.y) + ', ' + Math.round(_savedWaypoint.z) });
+});
 
 const proxyTestUrlInput = document.getElementById('proxyTestUrl');
 const proxyTestDestInput = document.getElementById('proxyTestDest');

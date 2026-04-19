@@ -62,6 +62,7 @@ function createWebServer(options) {
 }
 
 function mountRoutes(app, io, botManager) {
+  let _lastConnOptions = {};
   app.get('/healthz', (req, res) => {
     res.json({ ok: true, uptime: Math.round(process.uptime()) });
   });
@@ -83,7 +84,21 @@ function mountRoutes(app, io, botManager) {
   ['/api/start', '/bot-api/start'].forEach((route) => {
     app.post(route, async (req, res) => {
       try {
-        await botManager.createBot(req.body || {});
+        _lastConnOptions = req.body || {};
+        await botManager.createBot(_lastConnOptions);
+        res.json({ ok: true, status: botManager.getStatus() });
+      } catch (err) {
+        res.status(400).json({ ok: false, error: err.message });
+      }
+    });
+  });
+
+  ['/api/reconnect', '/bot-api/reconnect'].forEach((route) => {
+    app.post(route, async (req, res) => {
+      try {
+        botManager.stop();
+        await new Promise(r => setTimeout(r, 600));
+        await botManager.createBot(_lastConnOptions);
         res.json({ ok: true, status: botManager.getStatus() });
       } catch (err) {
         res.status(400).json({ ok: false, error: err.message });

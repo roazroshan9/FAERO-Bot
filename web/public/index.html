@@ -49,6 +49,7 @@
           <div class="buttons">
             <button id="start">Connect</button>
             <button id="stop" class="danger">Disconnect</button>
+            <button id="retryConnect" class="retry-btn">Retry Connection</button>
           </div>
         </div>
 
@@ -59,10 +60,10 @@
           </div>
           <h2>Live Status</h2>
           <dl class="stats">
-            <div><dt>Health</dt><dd id="health">-</dd></div>
-            <div><dt>Hunger</dt><dd id="hunger">-</dd></div>
-            <div><dt>Position</dt><dd id="position">-</dd></div>
-            <div><dt>State</dt><dd id="state">idle</dd></div>
+            <div><dt>Health</dt><dd id="health"><span class="skeleton-line"></span></dd></div>
+            <div><dt>Hunger</dt><dd id="hunger"><span class="skeleton-line"></span></dd></div>
+            <div><dt>Position</dt><dd id="position"><span class="skeleton-line"></span></dd></div>
+            <div><dt>State</dt><dd id="state"><span class="skeleton-line"></span></dd></div>
           </dl>
         </div>
 
@@ -152,6 +153,11 @@
             <input id="payPlayer" placeholder="player">
             <input id="payAmount" placeholder="amount" type="number">
             <button id="pay">Pay</button>
+          </div>
+          <div class="control-row waypoint-row">
+            <button id="saveWaypoint" class="waypoint-save-btn">Save Waypoint</button>
+            <button id="returnWaypoint" class="waypoint-return-btn" disabled>Return to Waypoint</button>
+            <span id="waypointReadout" class="waypoint-readout">No waypoint saved</span>
           </div>
         </div>
 
