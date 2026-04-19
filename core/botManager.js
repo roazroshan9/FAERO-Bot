@@ -1,5 +1,6 @@
 const EventEmitter = require('events');
 const mineflayer = require('mineflayer');
+const { SocksClient } = require('socks');
 const pathfinderPlugin = require('mineflayer-pathfinder').pathfinder;
 const collectBlockPlugin = require('mineflayer-collectblock').plugin;
 const pvpPlugin = require('mineflayer-pvp').plugin;
@@ -46,13 +47,18 @@ class BotManager extends EventEmitter {
     this.stateManager.on('change', (state) => this.emit('state', state));
   }
 
-  createBot(options) {
-    const config = buildBotConfig(options);
+  async createBot(options) {
+    const { config, proxy } = buildBotConfig(options);
 
-    this.lastConnectionOptions = Object.assign({}, config);
+    this.lastConnectionOptions = Object.assign({}, config, proxy ? { proxy: sanitizeProxyUrl(proxy) } : {});
     this.shouldReconnect = true;
     this.stopBotOnly();
-    this.log('Creating bot for ' + config.host + ':' + config.port + ' as ' + config.username);
+    this.log('Creating bot for ' + config.host + ':' + config.port + ' as ' + config.username + (proxy ? ' [via SOCKS5 proxy]' : ''));
+
+    if (proxy) {
+      const stream = await buildSocksStream(proxy, config.host, config.port);
+      config.stream = stream;
+    }
 
     const bot = mineflayer.createBot(config);
     this.bot = bot;
@@ -265,7 +271,10 @@ class BotManager extends EventEmitter {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.shouldReconnect) {
-        this.createBot(this.lastConnectionOptions || undefined);
+        this.createBot(this.lastConnectionOptions || undefined).catch((err) => {
+          this.log('Reconnect failed: ' + err.message);
+          this.emit('bot', this.getStatus());
+        });
       }
     }, this.reconnectDelay);
   }
@@ -426,7 +435,49 @@ function buildBotConfig(options) {
   if (source.version) {
     config.version = String(source.version).trim();
   }
-  return config;
+  const proxy = source.proxy ? String(source.proxy).trim() : null;
+  if (proxy) validateProxyUrl(proxy);
+  return { config, proxy };
+}
+
+function validateProxyUrl(raw) {
+  let parsed;
+  try { parsed = new URL(raw); } catch { throw new Error('Invalid proxy URL — expected socks5://[user:pass@]host:port'); }
+  if (!['socks5:', 'socks5h:', 'socks4:', 'socks4a:', 'socks:'].includes(parsed.protocol)) {
+    throw new Error('Unsupported proxy protocol "' + parsed.protocol + '" — use socks5://');
+  }
+  if (!parsed.hostname) throw new Error('Proxy URL is missing a hostname');
+  const port = Number(parsed.port);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('Proxy URL has an invalid port');
+}
+
+function sanitizeProxyUrl(raw) {
+  try {
+    const p = new URL(raw);
+    return p.protocol + '//' + p.hostname + ':' + p.port;
+  } catch {
+    return 'socks5://[redacted]';
+  }
+}
+
+async function buildSocksStream(proxyUrl, destHost, destPort) {
+  let parsed;
+  try { parsed = new URL(proxyUrl); } catch (err) { throw new Error('Invalid proxy URL: ' + err.message); }
+  const socksType = parsed.protocol.startsWith('socks4') ? 4 : 5;
+  const proxyOpts = {
+    host: parsed.hostname,
+    port: Number(parsed.port),
+    type: socksType
+  };
+  if (parsed.username) proxyOpts.userId = decodeURIComponent(parsed.username);
+  if (parsed.password) proxyOpts.password = decodeURIComponent(parsed.password);
+
+  const result = await SocksClient.createConnection({
+    proxy: proxyOpts,
+    command: 'connect',
+    destination: { host: destHost, port: Number(destPort) }
+  });
+  return result.socket;
 }
 
 function isFiniteNumber(value) {

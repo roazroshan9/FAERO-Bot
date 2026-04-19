@@ -1034,6 +1034,12 @@ pre {
   }
 }
 
+/* ── Proxy field in Connection panel ────────────────────────── */
+.connection-panel label:has(#proxy) input {
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0;
+}
+
 /* ── Connection Diagnostics Panel ───────────────────────────── */
 .diagnostics-panel {
   display: flex;
@@ -1156,6 +1162,82 @@ pre {
   font-weight: 700;
   text-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
   white-space: nowrap;
+}
+
+/* ── Proxy divider + test section ───────────────────────────── */
+.proxy-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 6px 0;
+}
+
+.proxy-divider::before,
+.proxy-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0, 255, 0, 0.35), transparent);
+}
+
+.proxy-divider span {
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  color: var(--green);
+  text-shadow: 0 0 10px rgba(0, 255, 0, 0.6);
+  white-space: nowrap;
+}
+
+.proxy-url-input {
+  min-width: 220px;
+  flex: 2;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  letter-spacing: 0;
+}
+
+.proxy-dest-input {
+  min-width: 160px;
+  flex: 1;
+}
+
+.proxy-test-btn {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(0, 255, 0, 0.88), rgba(0, 210, 100, 0.82));
+  color: #001100;
+  border-color: rgba(0, 255, 0, 0.55);
+  letter-spacing: 0.1em;
+  padding: 12px 22px;
+  white-space: nowrap;
+  text-shadow: none;
+}
+
+.proxy-test-btn:hover {
+  background: linear-gradient(135deg, rgba(0, 255, 0, 1), rgba(0, 220, 110, 0.95));
+  box-shadow: 0 0 22px rgba(0, 255, 0, 0.5);
+}
+
+.proxy-test-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.proxy-log {
+  border-color: rgba(0, 255, 0, 0.22);
+  box-shadow: inset 0 0 28px rgba(0, 255, 0, 0.06), 0 0 16px rgba(0, 255, 0, 0.08);
+}
+
+.proxy-log .diag-label {
+  flex: 0 0 140px;
+}
+
+@media (max-width: 560px) {
+  .proxy-url-input,
+  .proxy-dest-input {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
 }
 
 @media (max-width: 560px) {

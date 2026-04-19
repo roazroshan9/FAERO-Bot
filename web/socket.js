@@ -7,11 +7,11 @@ function attachSocket(io, botManager) {
     socket.emit('status', botManager.getStatus());
     socket.emit('thought', buildThoughtPayload(botManager, null));
     socket.emit('inventory', botManager.getInventory());
-    socket.on('start', (options) => {
+    socket.on('start', async (options) => {
       try {
         const connection = normalizeConnectionOptions(options);
-        botManager.log('Connecting with web values: ' + connection.host + ':' + connection.port + ' as ' + connection.username);
-        botManager.createBot(connection);
+        botManager.log('Connecting with web values: ' + connection.host + ':' + connection.port + ' as ' + connection.username + (connection.proxy ? ' via proxy' : ''));
+        await botManager.createBot(connection);
         attachMinecraftChatBridge(io, botManager);
         socket.emit('status', botManager.getStatus());
       } catch (err) {
@@ -129,6 +129,8 @@ function normalizeConnectionOptions(options) {
   if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('Invalid port');
   const connection = { host, port, username, auth };
   if (version) connection.version = version;
+  const proxy = input.proxy ? String(input.proxy).trim() : '';
+  if (proxy) connection.proxy = proxy;
   return connection;
 }
 

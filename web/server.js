@@ -81,9 +81,9 @@ function mountRoutes(app, io, botManager) {
   });
 
   ['/api/start', '/bot-api/start'].forEach((route) => {
-    app.post(route, (req, res) => {
+    app.post(route, async (req, res) => {
       try {
-        botManager.createBot(req.body || {});
+        await botManager.createBot(req.body || {});
         res.json({ ok: true, status: botManager.getStatus() });
       } catch (err) {
         res.status(400).json({ ok: false, error: err.message });
@@ -128,6 +128,62 @@ function mountRoutes(app, io, botManager) {
 
   app.get('/bot-api/inventory', (req, res) => {
     res.json(botManager.getInventory());
+  });
+
+  app.post('/bot-api/test-proxy', async (req, res) => {
+    const { SocksClient } = require('socks');
+    const proxyUrl = String((req.body && req.body.proxy) || '').trim();
+    const destHost = String((req.body && req.body.host) || 'google.com').trim();
+    const destPort = Number((req.body && req.body.port) || 80);
+
+    if (!proxyUrl) return res.status(400).json({ ok: false, error: 'Proxy URL is required' });
+
+    let parsed;
+    try { parsed = new URL(proxyUrl); } catch {
+      return res.status(400).json({ ok: false, error: 'Invalid proxy URL — expected socks5://[user:pass@]host:port' });
+    }
+    if (!['socks5:', 'socks5h:', 'socks4:', 'socks4a:', 'socks:'].includes(parsed.protocol)) {
+      return res.status(400).json({ ok: false, error: 'Unsupported proxy protocol — use socks5://' });
+    }
+
+    const steps = [];
+    const proxyHost = parsed.hostname;
+    const proxyPort = Number(parsed.port);
+
+    const tcpStart = Date.now();
+    try {
+      await new Promise((resolve, reject) => {
+        const sock = new (require('net').Socket)();
+        const timer = setTimeout(() => { sock.destroy(); reject(new Error('Timed out')); }, 6000);
+        sock.connect(proxyPort, proxyHost, () => { clearTimeout(timer); sock.destroy(); resolve(); });
+        sock.on('error', (e) => { clearTimeout(timer); reject(e); });
+      });
+      steps.push({ label: 'PROXY REACHABLE', ok: true, detail: proxyHost + ':' + proxyPort + ' TCP OK', ms: Date.now() - tcpStart });
+    } catch (err) {
+      steps.push({ label: 'PROXY REACHABLE', ok: false, detail: err.message, ms: Date.now() - tcpStart });
+      return res.json({ ok: false, steps });
+    }
+
+    const socksType = parsed.protocol.startsWith('socks4') ? 4 : 5;
+    const proxyOpts = { host: proxyHost, port: proxyPort, type: socksType };
+    if (parsed.username) proxyOpts.userId = decodeURIComponent(parsed.username);
+    if (parsed.password) proxyOpts.password = decodeURIComponent(parsed.password);
+
+    const tunnelStart = Date.now();
+    try {
+      const result = await SocksClient.createConnection({
+        proxy: proxyOpts,
+        command: 'connect',
+        destination: { host: destHost, port: destPort }
+      });
+      result.socket.destroy();
+      steps.push({ label: 'SOCKS5 TUNNEL', ok: true, detail: 'Tunneled to ' + destHost + ':' + destPort + ' OK', ms: Date.now() - tunnelStart });
+    } catch (err) {
+      steps.push({ label: 'SOCKS5 TUNNEL', ok: false, detail: err.message.replace(/password[^,)]*/gi, 'password=[redacted]'), ms: Date.now() - tunnelStart });
+      return res.json({ ok: false, steps });
+    }
+
+    res.json({ ok: true, steps });
   });
 
   app.post('/bot-api/diagnostics', async (req, res) => {

@@ -45,6 +45,7 @@
           <label>Port <input id="port" placeholder="25565" type="number"></label>
           <label>Username <input id="username" placeholder="AI_Bot"></label>
           <label>Auth <input id="auth" placeholder="offline"></label>
+          <label>Proxy <input id="proxy" placeholder="socks5://host:port (optional)" autocomplete="off"></label>
           <div class="buttons">
             <button id="start">Connect</button>
             <button id="stop" class="danger">Disconnect</button>
@@ -249,14 +250,25 @@ reason: waiting</pre>
             <span class="pulse-dot cyan"></span>
           </div>
           <h2>Connection Diagnostics</h2>
-          <p class="chat-help">Enter a server host or IP to test DNS resolution, TCP reachability, and round-trip latency.</p>
+          <p class="chat-help">Test DNS resolution, TCP reachability, and round-trip latency to any server.</p>
           <div class="control-row diag-input-row">
             <input id="diagHost" placeholder="Server host / IP (e.g. mc.hypixel.net)">
             <input id="diagPort" placeholder="Port (default 25565)" type="number" class="diag-port-input">
             <button id="runDiagnostics" class="diag-run-btn">Run Diagnostics</button>
           </div>
-          <div id="diagLog" class="diag-log">
-            <div class="diag-idle">Awaiting diagnostics run…</div>
+
+          <div class="proxy-divider">
+            <span>SOCKS5 PROXY TEST</span>
+          </div>
+          <p class="chat-help">Verify a SOCKS5 proxy is reachable and can tunnel to the target before connecting the bot through it.</p>
+          <div class="control-row diag-input-row">
+            <input id="proxyTestUrl" placeholder="socks5://user:pass@host:port" autocomplete="off" class="proxy-url-input">
+            <input id="proxyTestDest" placeholder="Destination host (default: google.com)" class="proxy-dest-input">
+            <input id="proxyTestPort" placeholder="Port (default: 80)" type="number" class="diag-port-input">
+            <button id="testProxy" class="proxy-test-btn">Test Proxy</button>
+          </div>
+          <div id="proxyLog" class="diag-log proxy-log">
+            <div class="diag-idle">Awaiting proxy test…</div>
           </div>
         </div>
 

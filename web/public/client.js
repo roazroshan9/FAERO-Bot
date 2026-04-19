@@ -19,6 +19,7 @@ const els = {
   port: document.getElementById('port'),
   username: document.getElementById('username'),
   auth: document.getElementById('auth'),
+  proxy: document.getElementById('proxy'),
   connectionReadout: document.getElementById('connectionReadout'),
   unlockButton: document.getElementById('unlockButton'),
   lockScreen: document.getElementById('lock-screen'),
@@ -83,13 +84,15 @@ els.passInput.addEventListener('keydown', (event) => {
 });
 
 document.getElementById('start').addEventListener('click', () => {
+  const proxyVal = els.proxy.value.trim();
   const connection = {
     host: els.host.value.trim() || undefined,
     port: els.port.value ? Number(els.port.value) : undefined,
     username: els.username.value.trim() || undefined,
-    auth: els.auth.value.trim() || undefined
+    auth: els.auth.value.trim() || undefined,
+    proxy: proxyVal || undefined
   };
-  appendLog({ at: new Date().toISOString(), message: 'Connecting to ' + (connection.host || 'localhost') + ':' + (connection.port || 25565) + ' as ' + (connection.username || 'AI_Bot') });
+  appendLog({ at: new Date().toISOString(), message: 'Connecting to ' + (connection.host || 'localhost') + ':' + (connection.port || 25565) + ' as ' + (connection.username || 'AI_Bot') + (proxyVal ? ' via proxy' : '') });
   socket.emit('start', connection);
 });
 
@@ -500,6 +503,60 @@ function itemColor(name) {
   const g = 80 + ((h >> 8) & 0x7f);
   const b = 80 + (h & 0x7f);
   return 'rgba(' + r + ',' + g + ',' + b + ',0.7)';
+}
+
+const proxyTestUrlInput = document.getElementById('proxyTestUrl');
+const proxyTestDestInput = document.getElementById('proxyTestDest');
+const proxyTestPortInput = document.getElementById('proxyTestPort');
+const testProxyBtn = document.getElementById('testProxy');
+const proxyLog = document.getElementById('proxyLog');
+
+testProxyBtn.addEventListener('click', async () => {
+  const proxyUrl = proxyTestUrlInput.value.trim();
+  const destHost = proxyTestDestInput.value.trim() || 'google.com';
+  const destPort = proxyTestPortInput.value ? Number(proxyTestPortInput.value) : 80;
+
+  if (!proxyUrl) {
+    proxyLog.innerHTML = '<div class="diag-entry diag-fail"><span class="diag-label">ERROR</span><span class="diag-detail">Please enter a proxy URL (e.g. socks5://host:1080).</span></div>';
+    return;
+  }
+
+  testProxyBtn.disabled = true;
+  testProxyBtn.textContent = 'Testing…';
+  proxyLog.innerHTML = '<div class="diag-idle">Testing proxy: ' + escapeHtml(proxyUrl.replace(/:([^@/]+)@/, ':****@')) + '…</div>';
+
+  try {
+    const resp = await fetch('/bot-api/test-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ proxy: proxyUrl, host: destHost, port: destPort })
+    });
+    const data = await resp.json();
+
+    if (!resp.ok && !data.steps) {
+      proxyLog.innerHTML = '<div class="diag-entry diag-fail"><span class="diag-label">ERROR</span><span class="diag-detail">' + escapeHtml(data.error || 'Unknown error') + '</span></div>';
+      return;
+    }
+
+    let html = '';
+    (data.steps || []).forEach((step) => {
+      const cls = step.ok ? 'diag-ok' : 'diag-fail';
+      const badge = step.ok ? 'OK' : 'FAIL';
+      const ms = step.ms !== null && step.ms !== undefined ? ' <span class="diag-ms">' + step.ms + 'ms</span>' : '';
+      html += '<div class="diag-entry ' + cls + '"><span class="diag-badge">' + badge + '</span><span class="diag-label">' + escapeHtml(step.label) + '</span><span class="diag-detail">' + escapeHtml(step.detail || '') + '</span>' + ms + '</div>';
+    });
+    if (!html) html = '<div class="diag-idle">No results returned.</div>';
+    proxyLog.innerHTML = html;
+  } catch (err) {
+    proxyLog.innerHTML = '<div class="diag-entry diag-fail"><span class="diag-label">ERROR</span><span class="diag-detail">Request failed: ' + escapeHtml(err.message) + '</span></div>';
+  } finally {
+    testProxyBtn.disabled = false;
+    testProxyBtn.textContent = 'Test Proxy';
+  }
+});
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 const diagHostInput = document.getElementById('diagHost');
