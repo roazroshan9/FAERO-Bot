@@ -211,6 +211,23 @@ reason: waiting</pre>
           </div>
         </div>
 
+        <div class="card wide glass-panel diagnostics-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">NETWORK</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <h2>Connection Diagnostics</h2>
+          <p class="chat-help">Enter a server host or IP to test DNS resolution, TCP reachability, and round-trip latency.</p>
+          <div class="control-row diag-input-row">
+            <input id="diagHost" placeholder="Server host / IP (e.g. mc.hypixel.net)">
+            <input id="diagPort" placeholder="Port (default 25565)" type="number" class="diag-port-input">
+            <button id="runDiagnostics" class="diag-run-btn">Run Diagnostics</button>
+          </div>
+          <div id="diagLog" class="diag-log">
+            <div class="diag-idle">Awaiting diagnostics run…</div>
+          </div>
+        </div>
+
         <div class="card wide glass-panel logs-panel">
           <div class="panel-title-row">
             <p class="eyebrow">EVENT STREAM</p>

@@ -1,6 +1,8 @@
 const path = require('path');
 const express = require('express');
 const http = require('http');
+const net = require('net');
+const dns = require('dns');
 const socketIo = require('socket.io');
 const defaultBotManager = require('../core/botManager');
 const attachSocket = require('./socket');
@@ -122,6 +124,58 @@ function mountRoutes(app, io, botManager) {
     const enabled = Boolean(req.body && req.body.enabled);
     botManager.setLowPowerMode(enabled);
     res.json({ ok: true, lowPowerMode: botManager.lowPowerMode });
+  });
+
+  app.post('/bot-api/diagnostics', async (req, res) => {
+    const host = String((req.body && req.body.host) || '').trim();
+    const port = Number((req.body && req.body.port) || 25565);
+    if (!host) return res.status(400).json({ ok: false, error: 'Host is required' });
+
+    const results = { host, port, steps: [] };
+
+    const dnsStart = Date.now();
+    let resolvedIp = host;
+    try {
+      const addresses = await new Promise((resolve, reject) => {
+        dns.resolve4(host, (err, addrs) => {
+          if (err) reject(err);
+          else resolve(addrs);
+        });
+      });
+      resolvedIp = addresses[0];
+      results.steps.push({ label: 'DNS', ok: true, detail: addresses.join(', '), ms: Date.now() - dnsStart });
+    } catch (err) {
+      results.steps.push({ label: 'DNS', ok: false, detail: err.code || err.message, ms: Date.now() - dnsStart });
+      return res.json({ ok: false, results });
+    }
+
+    const tcpStart = Date.now();
+    try {
+      await new Promise((resolve, reject) => {
+        const socket = new net.Socket();
+        const timeout = setTimeout(() => {
+          socket.destroy();
+          reject(new Error('Connection timed out'));
+        }, 6000);
+        socket.connect(port, resolvedIp, () => {
+          clearTimeout(timeout);
+          socket.destroy();
+          resolve();
+        });
+        socket.on('error', (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+      });
+      const tcpMs = Date.now() - tcpStart;
+      results.steps.push({ label: 'TCP', ok: true, detail: resolvedIp + ':' + port + ' reachable', ms: tcpMs });
+      results.steps.push({ label: 'Latency', ok: true, detail: tcpMs + 'ms round-trip', ms: tcpMs });
+    } catch (err) {
+      results.steps.push({ label: 'TCP', ok: false, detail: err.message, ms: Date.now() - tcpStart });
+      results.steps.push({ label: 'Latency', ok: false, detail: 'N/A', ms: null });
+    }
+
+    res.json({ ok: true, results });
   });
 
   app.post('/bot-api/chat', (req, res) => {

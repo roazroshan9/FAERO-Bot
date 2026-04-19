@@ -826,3 +826,135 @@ pre {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* ── Connection Diagnostics Panel ───────────────────────────── */
+.diagnostics-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.diag-input-row {
+  align-items: stretch;
+}
+
+.diag-port-input {
+  max-width: 180px;
+  flex: 0 0 180px;
+}
+
+.diag-run-btn {
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(0, 255, 255, 0.94), rgba(0, 200, 255, 0.88));
+  color: #001111;
+  border-color: rgba(0, 255, 255, 0.55);
+  letter-spacing: 0.1em;
+  padding: 12px 22px;
+  white-space: nowrap;
+}
+
+.diag-log {
+  min-height: 140px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(0, 255, 255, 0.18);
+  color: #cffff7;
+  box-shadow: inset 0 0 28px rgba(0, 255, 255, 0.08), var(--glow-cyan);
+  overflow: auto;
+  scrollbar-color: var(--cyan) transparent;
+  font-size: 0.9rem;
+}
+
+.diag-idle {
+  color: var(--muted);
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+
+.diag-header {
+  margin-bottom: 12px;
+  color: var(--cyan);
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+  letter-spacing: 0.04em;
+}
+
+.diag-ts {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
+.diag-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(0, 255, 255, 0.08);
+  animation: typeIn 250ms ease both;
+}
+
+.diag-entry:last-child {
+  border-bottom: none;
+}
+
+.diag-label {
+  flex: 0 0 72px;
+  font-weight: 900;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9bdede;
+}
+
+.diag-badge {
+  flex: 0 0 44px;
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  border-radius: 6px;
+  padding: 2px 6px;
+  text-align: center;
+}
+
+.diag-ok .diag-badge {
+  background: rgba(0, 255, 0, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(0, 255, 0, 0.4);
+  text-shadow: 0 0 8px rgba(0, 255, 0, 0.6);
+}
+
+.diag-fail .diag-badge {
+  background: rgba(255, 49, 95, 0.15);
+  color: var(--red);
+  border: 1px solid rgba(255, 49, 95, 0.4);
+  text-shadow: 0 0 8px rgba(255, 49, 95, 0.6);
+}
+
+.diag-detail {
+  flex: 1;
+  color: #dbfff8;
+  overflow-wrap: anywhere;
+}
+
+.diag-fail .diag-detail {
+  color: #ffb3c2;
+}
+
+.diag-ms {
+  flex: 0 0 auto;
+  color: var(--cyan);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .diag-port-input {
+    max-width: 100%;
+    flex: 1 1 100%;
+  }
+}
+

@@ -390,3 +390,53 @@ function value(input) {
 function formatRuntimeStatus(status) {
   return String(status || 'running').replace(/_/g, ' ');
 }
+
+const diagHostInput = document.getElementById('diagHost');
+const diagPortInput = document.getElementById('diagPort');
+const runDiagBtn = document.getElementById('runDiagnostics');
+const diagLog = document.getElementById('diagLog');
+
+runDiagBtn.addEventListener('click', async () => {
+  const host = diagHostInput.value.trim();
+  const port = diagPortInput.value ? Number(diagPortInput.value) : 25565;
+  if (!host) {
+    diagLog.innerHTML = '<div class="diag-entry diag-fail"><span class="diag-label">ERROR</span><span class="diag-detail">Please enter a host or IP address.</span></div>';
+    return;
+  }
+
+  runDiagBtn.disabled = true;
+  runDiagBtn.textContent = 'Running…';
+  diagLog.innerHTML = '<div class="diag-idle">Running diagnostics on ' + host + ':' + port + '…</div>';
+
+  try {
+    const res = await fetch('/bot-api/diagnostics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ host, port })
+    });
+    const data = await res.json();
+    renderDiagResults(host, port, data);
+  } catch (err) {
+    diagLog.innerHTML = '<div class="diag-entry diag-fail"><span class="diag-label">ERROR</span><span class="diag-detail">Request failed: ' + err.message + '</span></div>';
+  } finally {
+    runDiagBtn.disabled = false;
+    runDiagBtn.textContent = 'Run Diagnostics';
+  }
+});
+
+function renderDiagResults(host, port, data) {
+  const ts = new Date().toLocaleTimeString();
+  let html = '<div class="diag-header">> Diagnostics for <strong>' + host + ':' + port + '</strong> &nbsp;<span class="diag-ts">' + ts + '</span></div>';
+  const steps = (data.results && data.results.steps) || [];
+  if (steps.length === 0) {
+    html += '<div class="diag-entry diag-fail"><span class="diag-label">FAIL</span><span class="diag-detail">' + (data.error || 'Unknown error') + '</span></div>';
+  } else {
+    steps.forEach((step) => {
+      const cls = step.ok ? 'diag-ok' : 'diag-fail';
+      const badge = step.ok ? 'OK' : 'FAIL';
+      const ms = step.ms != null ? ' <span class="diag-ms">' + step.ms + 'ms</span>' : '';
+      html += '<div class="diag-entry ' + cls + '"><span class="diag-label">' + step.label + '</span><span class="diag-badge">' + badge + '</span><span class="diag-detail">' + step.detail + '</span>' + ms + '</div>';
+    });
+  }
+  diagLog.innerHTML = html;
+}
