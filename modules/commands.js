@@ -4,6 +4,8 @@ const pathfinding = require('./pathfinding');
 const economy = require('./economy');
 const { STATES } = require('../core/stateManager');
 
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
 function normalize(message) {
   return String(message || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
@@ -13,24 +15,128 @@ function isAuthorized(username, memory) {
   return username === configured || memory.isTrusted(username);
 }
 
-// ✅ safe player finder
-function getTarget(bot, username) {
-  const target = bot.players[username]?.entity;
-
-  if (!target) {
-    bot.chat("I can't see you!");
-    return null;
-  }
-
-  const distance = bot.entity.position.distanceTo(target.position);
-
-  if (distance > 50) {
-    bot.chat("Too far! Come closer.");
-    return null;
-  }
-
-  return target;
+function say(bot, message) {
+  bot.chat('[FAERO]: ' + message);
 }
+
+function getInventoryCount(bot) {
+  try { return bot.inventory ? bot.inventory.items().length : 0; } catch { return 0; }
+}
+
+function round1(n) { return Math.round(n * 10) / 10; }
+
+function getTarget(bot, username) {
+  const player = bot.players[username];
+  if (!player || !player.entity) {
+    say(bot, 'Error — Cannot locate you. Are you within render distance?');
+    return null;
+  }
+  const dist = bot.entity.position.distanceTo(player.entity.position);
+  if (dist > 50) {
+    say(bot, 'Error — You are ' + Math.round(dist) + ' blocks away. Max range is 50.');
+    return null;
+  }
+  return player.entity;
+}
+
+// ─── NLP Intent Parser ────────────────────────────────────────────────────────
+
+function parseIntent(text) {
+  if (/^(help|commands|what can you do|options|list commands?)$/.test(text)) {
+    return { cmd: 'help' };
+  }
+  if (/^(status|stats|info|where are you|how are you|report|position|pos|location|health)$/.test(text)) {
+    return { cmd: 'status' };
+  }
+  if (/^(follow(?: me)?|track me|stay close|trail me|accompany me)$/.test(text)) {
+    return { cmd: 'follow' };
+  }
+  if (/^(come(?: here| to me| over)?|get to me|approach|come closer)$/.test(text)) {
+    return { cmd: 'come' };
+  }
+  if (/^(stop|halt|freeze|cancel|abort|stand down|pause|idle|at ease)$/.test(text)) {
+    return { cmd: 'stop' };
+  }
+  if (/^(protect(?: me)?|guardian(?: mode)?|guard(?: me)?|watch over me|defend(?: me)?)$/.test(text)) {
+    return { cmd: 'protect' };
+  }
+  if (/^(jump|hop)$/.test(text)) return { cmd: 'jump' };
+  if (/^(look around|look|survey|scan)$/.test(text)) return { cmd: 'look' };
+  if (/^(eat(?: food)?|consume|feed yourself|eat something)$/.test(text)) return { cmd: 'eat' };
+  if (/^(collect food|get food|food|gather food|forage|get something to eat)$/.test(text)) return { cmd: 'food' };
+  if (/^(mine iron|dig iron|iron ore|get iron)$/.test(text)) return { cmd: 'mine_iron' };
+  if (/^(cut wood|chop(?: wood)?|wood|lumber|get wood|tree)$/.test(text)) return { cmd: 'wood' };
+  if (/^(bal|balance|money|wallet|cash|funds|how much)$/.test(text)) return { cmd: 'balance' };
+
+  let m;
+
+  m = text.match(/^(?:attack|kill|fight|destroy|eliminate|target)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'attack', target: m[1] };
+
+  m = text.match(/^pay\s+([a-z0-9_]+)\s+(\d+)$/);
+  if (m) return { cmd: 'pay', player: m[1], amount: Number(m[2]) };
+
+  const coordsRe = /(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/;
+  const coordsMatch = text.match(coordsRe);
+  if (coordsMatch && /^(?:go|goto|navigate|move|head|tp|teleport|path|route)/.test(text)) {
+    return {
+      cmd: 'goto',
+      x: Number(coordsMatch[1]),
+      y: Number(coordsMatch[2]),
+      z: Number(coordsMatch[3])
+    };
+  }
+
+  m = text.match(/^(?:mine|dig)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)(?:\s+radius\s+(\d+))?$/);
+  if (m) return { cmd: 'mine_area', x: Number(m[1]), y: Number(m[2]), z: Number(m[3]), radius: Number(m[4] || 5) };
+
+  m = text.match(/^(?:mine|dig|find|get)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'mine_block', block: m[1] };
+
+  return null;
+}
+
+// ─── Guardian Mode ────────────────────────────────────────────────────────────
+
+function startGuardianMode(ctx, username, bot) {
+  stopGuardianMode(ctx);
+  ctx.manager._guardianActive = true;
+  ctx.manager._guardianUsername = username;
+
+  ctx.manager._guardianTimer = setInterval(() => {
+    if (!ctx.manager._guardianActive) return;
+    if (!bot || !bot.entity) return;
+    const player = bot.players[username];
+    if (!player || !player.entity) return;
+
+    const hostile = bot.nearestEntity((entity) => {
+      if (!combat.isHostileMob(entity)) return false;
+      return entity.position.distanceTo(player.entity.position) <= 10;
+    });
+
+    if (!hostile) return;
+    try {
+      if (bot.pvp && bot.pvp.attack) {
+        bot.pvp.attack(hostile);
+      } else {
+        bot.attack(hostile);
+      }
+    } catch (_) {}
+  }, 1500);
+}
+
+function stopGuardianMode(ctx) {
+  if (ctx.manager && ctx.manager._guardianTimer) {
+    clearInterval(ctx.manager._guardianTimer);
+    ctx.manager._guardianTimer = null;
+  }
+  if (ctx.manager) {
+    ctx.manager._guardianActive = false;
+    ctx.manager._guardianUsername = null;
+  }
+}
+
+// ─── Entry Points ─────────────────────────────────────────────────────────────
 
 function handleChat(ctx, username, message) {
   if (username === ctx.bot.username) return false;
@@ -56,10 +162,11 @@ function handleCommand(ctx, username, message) {
   const memory = ctx.memory;
   const pvpEnabled = ctx.pvpEnabled;
 
-  function commandTask(name, fn) {
+  // Branded command task wrapper with specific error reporting
+  function commandTask(label, fn) {
     if (ctx.manager && ctx.manager.tryCommandCooldown) {
       if (!ctx.manager.tryCommandCooldown()) {
-        bot.chat('Please wait before sending another command.');
+        say(bot, 'Cooldown active — wait a moment before the next command.');
         return false;
       }
     }
@@ -67,14 +174,15 @@ function handleCommand(ctx, username, message) {
       ctx.manager.commandInterrupt();
     }
     queue.clear();
-    queue.push(name, async () => {
-      state.setState(STATES.COMMAND, name);
-      memory.setLastAction('command: ' + name);
+    queue.push(label, async () => {
+      state.setState(STATES.COMMAND, label);
+      memory.setLastAction('command: ' + label);
+      say(bot, 'Command [' + label + '] initialized.');
       try {
         await fn();
       } catch (err) {
-        console.log('Command error:', err.message);
-        bot.chat("Something went wrong.");
+        const detail = classifyError(err);
+        say(bot, 'Error — ' + detail);
       } finally {
         state.reset('command complete');
       }
@@ -82,208 +190,209 @@ function handleCommand(ctx, username, message) {
     return true;
   }
 
-  // -----------------
-  // 🟢 MOVEMENT
-  // -----------------
-
-  if (text === 'follow me' || text === 'follow') {
-    return commandTask('follow', async () => {
-      const target = getTarget(bot, username);
-      if (!target) return;
-
-      bot.chat("Following you...");
-      state.setState(STATES.FOLLOWING, username);
-      pathfinding.followPlayer(bot, username, 2);
-    });
+  const intent = parseIntent(text);
+  if (!intent) {
+    say(bot, 'Unknown command. Type !help to see all available commands.');
+    return false;
   }
 
-  if (text === 'come here' || text === 'come') {
-    return commandTask('come here', async () => {
-      const target = getTarget(bot, username);
-      if (!target) return;
+  switch (intent.cmd) {
 
-      bot.chat("Coming...");
-      await pathfinding.goToCoords(
-        bot,
-        target.position.x,
-        target.position.y,
-        target.position.z,
-        1
+    // ── Help ───────────────────────────────────────────────────────────────
+    case 'help': {
+      const lines = [
+        '[FAERO]: Commands: !follow !come !stop !status !protect',
+        '!go <x> <y> <z>  !mine <block>  !attack <name>  !help'
+      ];
+      lines.forEach((l) => bot.chat(l));
+      return true;
+    }
+
+    // ── Status ─────────────────────────────────────────────────────────────
+    case 'status': {
+      const pos = bot.entity.position;
+      const x = round1(pos.x), y = round1(pos.y), z = round1(pos.z);
+      const hp = Math.round((bot.health || 0) * 10) / 10;
+      const hunger = Math.round(bot.food || 0);
+      const items = getInventoryCount(bot);
+      const guardianOn = ctx.manager && ctx.manager._guardianActive;
+      const stateLabel = guardianOn ? 'GUARDIAN' : (state.getState ? state.getState().state : 'idle');
+      say(bot,
+        'Online | Pos: ' + x + ' ' + y + ' ' + z +
+        ' | HP: ' + hp + '/20 | Hunger: ' + hunger + '/20' +
+        ' | Items: ' + items + ' | Mode: ' + stateLabel
       );
-    });
-  }
+      return true;
+    }
 
-  if (text === 'stop') {
-    return commandTask('stop', async () => {
-      bot.chat("Stopping...");
-      pathfinding.stop(bot);
-      combat.stopCombat(bot);
-    });
-  }
+    // ── Movement ───────────────────────────────────────────────────────────
+    case 'follow':
+      return commandTask('Follow', async () => {
+        const target = getTarget(bot, username);
+        if (!target) return;
+        state.setState(STATES.FOLLOWING, username);
+        pathfinding.followPlayer(bot, username, 2);
+        say(bot, 'Tracking you at 2-block range.');
+      });
 
-  // -----------------
-  // 📍 GO TO
-  // -----------------
+    case 'come':
+      return commandTask('Come', async () => {
+        const target = getTarget(bot, username);
+        if (!target) return;
+        say(bot, 'Plotting route to your position.');
+        await pathfinding.goToCoords(bot, target.position.x, target.position.y, target.position.z, 1);
+        say(bot, 'Arrived.');
+      });
 
-  let match = text.match(/^go(?: to)? (-?\d+) (-?\d+) (-?\d+)$/);
-  if (match) {
-    return commandTask('go to', async () => {
-      bot.chat("Moving...");
-      await pathfinding.goToCoords(
-        bot,
-        Number(match[1]),
-        Number(match[2]),
-        Number(match[3]),
-        1
-      );
-    });
-  }
+    case 'stop':
+      stopGuardianMode(ctx);
+      return commandTask('Stop', async () => {
+        pathfinding.stop(bot);
+        combat.stopCombat(bot);
+        say(bot, 'All tasks halted. Standing by.');
+      });
 
-  // -----------------
-  // ⚔️ COMBAT
-  // -----------------
+    case 'goto':
+      return commandTask('Goto', async () => {
+        const { x, y, z } = intent;
+        say(bot, 'Navigating to ' + x + ' ' + y + ' ' + z + ' — plotting safe route.');
+        await pathfinding.goToCoords(bot, x, y, z, 1);
+        say(bot, 'Destination reached: ' + x + ' ' + y + ' ' + z);
+      });
 
-  match = text.match(/^attack ([a-zA-Z0-9_]+)$/);
-  if (match) {
-    const target = match[1];
-    return commandTask('attack', async () => {
-      bot.chat("Attacking " + target);
-      state.setState(STATES.FIGHTING, target);
-      memory.addEnemy(target);
-      await combat.attackPlayer(bot, memory, target, pvpEnabled);
-    });
-  }
+    // ── Guardian Mode ──────────────────────────────────────────────────────
+    case 'protect':
+      return commandTask('Guardian', async () => {
+        startGuardianMode(ctx, username, bot);
+        say(bot, 'Guardian Mode ACTIVE — scanning 10-block radius around you for hostiles.');
+      });
 
-  if (text === 'defend me') {
-    return commandTask('defend', async () => {
-      bot.chat("Defending...");
-      memory.trustPlayer(username);
+    // ── Jump / Look ────────────────────────────────────────────────────────
+    case 'jump':
+      return commandTask('Jump', async () => {
+        bot.setControlState('jump', true);
+        await new Promise((r) => setTimeout(r, 400));
+        bot.setControlState('jump', false);
+      });
 
-      const hostile = combat.nearestHostileMob(bot, 24);
+    case 'look':
+      return commandTask('Survey', async () => {
+        bot.look(Math.random() * Math.PI * 2, 0, true);
+        say(bot, 'Scanning surroundings.');
+      });
 
-      if (hostile) {
-        bot.chat("Enemy found!");
-        state.setState(STATES.FIGHTING, hostile.name);
-        await combat.attackMob(bot, hostile);
-      } else {
-        bot.chat("No enemies nearby.");
+    // ── Combat ─────────────────────────────────────────────────────────────
+    case 'attack': {
+      const target = intent.target;
+      return commandTask('Attack', async () => {
+        state.setState(STATES.FIGHTING, target);
+        memory.addEnemy(target);
+        await combat.attackPlayer(bot, memory, target, pvpEnabled);
+      });
+    }
+
+    // ── Survival ───────────────────────────────────────────────────────────
+    case 'food':
+      return commandTask('Collect Food', async () => {
+        say(bot, 'Scanning for nearby food sources.');
+        await survival.collectFood(bot);
+        say(bot, 'Food collection complete.');
+      });
+
+    case 'eat':
+      return commandTask('Eat', async () => {
+        const items = getInventoryCount(bot);
+        if (items === 0) throw new Error('Inventory is empty — nothing to eat.');
+        await survival.eatFood(bot);
+        say(bot, 'Consumed food. HP: ' + Math.round(bot.health || 0));
+      });
+
+    // ── Mining ─────────────────────────────────────────────────────────────
+    case 'mine_iron':
+      return commandTask('Mine Iron', async () => {
+        state.setState(STATES.MINING, 'iron');
+        say(bot, 'Scanning for iron ore.');
+        await survival.mineIron(bot);
+        say(bot, 'Iron mining session complete.');
+      });
+
+    case 'wood':
+      return commandTask('Cut Wood', async () => {
+        state.setState(STATES.MINING, 'wood');
+        say(bot, 'Locating trees.');
+        await survival.cutWood(bot);
+        say(bot, 'Wood collection complete.');
+      });
+
+    case 'mine_area': {
+      const { x, y, z, radius } = intent;
+      return commandTask('Area Mine', async () => {
+        state.setState(STATES.MINING, 'area');
+        say(bot, 'Area mining at ' + x + ' ' + y + ' ' + z + ' radius ' + radius);
+        await survival.mineArea(bot, x, y, z, radius);
+        say(bot, 'Area mine complete.');
+      });
+    }
+
+    case 'mine_block': {
+      const block = intent.block;
+      if (!bot.registry || !bot.registry.blocksByName[block]) {
+        say(bot, 'Error — Unknown block "' + block + '". Check the block name and try again.');
+        return false;
       }
-    });
+      return commandTask('Mine ' + block, async () => {
+        state.setState(STATES.MINING, block);
+        say(bot, 'Searching for ' + block + ' within range.');
+        await survival.mineBlockByName(bot, block, 64);
+        say(bot, 'Mining session for ' + block + ' complete.');
+      });
+    }
+
+    // ── Economy ────────────────────────────────────────────────────────────
+    case 'pay':
+      return commandTask('Pay', async () => {
+        state.setState(STATES.PAYING, intent.player);
+        await economy.pay(bot, memory, intent.player, intent.amount, 'manual', 10000);
+        say(bot, 'Payment of ' + intent.amount + ' to ' + intent.player + ' processed.');
+      });
+
+    case 'balance':
+      return commandTask('Balance', async () => {
+        economy.requestBalance(bot);
+      });
+
+    default:
+      say(bot, 'Unknown command. Type !help to see all available commands.');
+      return false;
   }
+}
 
-  // -----------------
-  // 🌾 SURVIVAL
-  // -----------------
+// ─── Error Classifier ─────────────────────────────────────────────────────────
 
-  if (text === 'collect food') {
-    return commandTask('food', async () => {
-      bot.chat("Collecting food...");
-      await survival.collectFood(bot);
-    });
+function classifyError(err) {
+  const msg = (err && err.message) ? err.message.toLowerCase() : '';
+  if (msg.includes('no path') || msg.includes('cannot find') || msg.includes('pathfind')) {
+    return 'Path blocked — cannot find a safe route to that location.';
   }
-
-  if (text === 'eat food') {
-    return commandTask('eat', async () => {
-      bot.chat("Eating...");
-      await survival.eatFood(bot);
-    });
+  if (msg.includes('lava') || msg.includes('fire')) {
+    return 'Route blocked by lava or fire. Move to a safer area first.';
   }
-
-  // -----------------
-  // ⛏️ MINING
-  // -----------------
-
-  if (text === 'mine iron') {
-    return commandTask('mine iron', async () => {
-      bot.chat("Mining iron...");
-      state.setState(STATES.MINING, 'iron');
-      await survival.mineIron(bot);
-    });
+  if (msg.includes('inventory') || msg.includes('full')) {
+    return 'Inventory full — drop some items and try again.';
   }
-
-  if (text === 'cut wood') {
-    return commandTask('wood', async () => {
-      bot.chat("Cutting trees...");
-      state.setState(STATES.MINING, 'wood');
-      await survival.cutWood(bot);
-    });
+  if (msg.includes('too far') || msg.includes('distance')) {
+    return 'Target is too far away. Close the gap and retry.';
   }
-
-  match = text.match(/^mine (-?\d+) (-?\d+) (-?\d+)(?: radius (\d+))?$/);
-  if (match) {
-    return commandTask('area mine', async () => {
-      bot.chat("Area mining...");
-      state.setState(STATES.MINING, 'area');
-      await survival.mineArea(
-        bot,
-        Number(match[1]),
-        Number(match[2]),
-        Number(match[3]),
-        Number(match[4] || 5)
-      );
-    });
+  if (msg.includes('not found') || msg.includes('no block') || msg.includes('no target')) {
+    return 'Target not found nearby. Try a different location or block type.';
   }
-
-  match = text.match(/^mine ([a-z0-9_]+)$/);
-  if (match) {
-    const blockName = match[1];
-    return commandTask('mine block', async () => {
-      bot.chat("Mining " + blockName);
-      state.setState(STATES.MINING, blockName);
-      await survival.mineBlockByName(bot, blockName, 64);
-    });
+  if (msg.includes('safety blocked') || msg.includes('pvp')) {
+    return 'Action blocked — PvP is disabled or target is not an enemy.';
   }
-
-  // -----------------
-  // 💸 ECONOMY
-  // -----------------
-
-  match = text.match(/^pay ([a-zA-Z0-9_]+) (\d+)$/);
-  if (match) {
-    return commandTask('pay', async () => {
-      bot.chat("Paying...");
-      state.setState(STATES.PAYING, match[1]);
-      await economy.pay(
-        bot,
-        memory,
-        match[1],
-        Number(match[2]),
-        'manual',
-        10000
-      );
-    });
+  if (msg.includes('timeout')) {
+    return 'Action timed out — the task took too long and was aborted.';
   }
-
-  if (text === 'bal' || text === 'balance') {
-    return commandTask('balance', async () => {
-      economy.requestBalance(bot);
-    });
-  }
-
-  // -----------------
-  // 🧠 EXTRA COMMANDS
-  // -----------------
-
-  if (text === 'status') {
-    return commandTask('status', async () => {
-      bot.chat(`HP: ${bot.health} | Hunger: ${bot.food}`);
-    });
-  }
-
-  if (text === 'jump') {
-    return commandTask('jump', async () => {
-      bot.setControlState('jump', true);
-      setTimeout(() => bot.setControlState('jump', false), 400);
-    });
-  }
-
-  if (text === 'look around') {
-    return commandTask('look', async () => {
-      bot.look(Math.random() * Math.PI * 2, 0, true);
-    });
-  }
-
-  return false;
+  return (err && err.message) ? err.message : 'Unexpected error.';
 }
 
 module.exports = {

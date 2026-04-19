@@ -6,10 +6,17 @@ function setupMovements(bot) {
 
   const movements = new Movements(bot);
 
-  // ⚡ performance tuning
   movements.canDig = false;
-  movements.allow1by1towers = false; // reduce lag
+  movements.allow1by1towers = false;
   movements.allowParkour = false;
+  movements.allowSprinting = true;
+
+  // Avoid lava and fire — treat as impassable
+  const danger = ['lava', 'flowing_lava', 'fire', 'magma_block'];
+  danger.forEach((name) => {
+    const block = bot.registry.blocksByName[name];
+    if (block) movements.blocksCantBreak.add(block.id);
+  });
 
   bot.pathfinder.setMovements(movements);
   return movements;
@@ -33,8 +40,11 @@ async function goToCoords(bot, x, y, z, range) {
   try {
     await bot.pathfinder.goto(goal);
   } catch (err) {
-    console.log("Path error:", err.message);
-    bot.chat("Can't reach that location.");
+    const msg = err && err.message ? err.message.toLowerCase() : '';
+    if (msg.includes('no path') || msg.includes('cannot find')) {
+      throw new Error('no path found to ' + nx + ' ' + ny + ' ' + nz);
+    }
+    throw err;
   }
 }
 
