@@ -2,20 +2,24 @@
  * FAERO — Role-Based Access Control (RBAC)
  *
  * Single source of truth for permissions on both Discord and in-game.
- * Changes to env vars take effect immediately (no restart needed for
- * env-var changes). File overrides (roles.json) can be reloaded at
- * runtime with reloadRoles() or via the !bot reload Discord command.
+ * Changes to env vars take effect immediately (no restart needed).
+ * File overrides (roles.json) can be reloaded at runtime via reloadRoles().
  *
- * TIER HIERARCHY
- *   NONE  (0) — unknown user, all commands denied
- *   MOD   (1) — moderator, utility commands only
- *   OWNER (2) — full access to all commands
+ * TIER HIERARCHY (strictly ordered)
+ *   NONE    (0) — unknown user, all commands denied
+ *   MANAGER (1) — operational permissions only (mine, move, follow)
+ *                 cannot run any role-management commands
+ *   ADMIN   (2) — full functional access + can manage Managers
+ *                 cannot add/remove other Admins or the Owner
+ *   OWNER   (3) — unrestricted access, manages all roles
  *
  * SETUP ENV VARS (add to Replit Secrets)
  *   OWNER_DISCORD_ID       — your 18-digit Discord user ID
  *   OWNER_MC_NAME          — your Minecraft username (defaults to AUTHORIZED_USER)
- *   MODERATOR_DISCORD_IDS  — comma-separated Discord user IDs
- *   MODERATOR_MC_NAMES     — comma-separated Minecraft usernames
+ *   ADMIN_DISCORD_IDS      — comma-separated Admin Discord user IDs
+ *   ADMIN_MC_NAMES         — comma-separated Admin Minecraft usernames
+ *   MANAGER_DISCORD_IDS    — comma-separated Manager Discord user IDs (was MODERATOR_DISCORD_IDS)
+ *   MANAGER_MC_NAMES       — comma-separated Manager Minecraft usernames (was MODERATOR_MC_NAMES)
  */
 
 'use strict';
@@ -25,67 +29,95 @@ const path = require('path');
 
 // ─── Tiers ────────────────────────────────────────────────────────────────────
 
-const TIERS = Object.freeze({ NONE: 0, MOD: 1, OWNER: 2 });
+const TIERS = Object.freeze({
+  NONE:    0,
+  MANAGER: 1,
+  MOD:     1,  // backward-compat alias for MANAGER
+  ADMIN:   2,
+  OWNER:   3
+});
 
 // ─── Permission Maps ──────────────────────────────────────────────────────────
-// Every command key maps to the MINIMUM tier required to execute it.
+// Every key maps to the MINIMUM tier required to execute that command.
 // Any command NOT listed here defaults to OWNER (safest default).
 
 const DISCORD_PERMISSIONS = Object.freeze({
-  // MOD + OWNER
-  help:          TIERS.MOD,
-  status:        TIERS.MOD,
-  health:        TIERS.MOD,
-  logs:          TIERS.MOD,
-  // OWNER only (admin / resource management)
-  chat:          TIERS.OWNER,
-  follow:        TIERS.OWNER,
-  stop:          TIERS.OWNER,
-  go:            TIERS.OWNER,
-  connect:       TIERS.OWNER,
-  disconnect:    TIERS.OWNER,
-  ai:            TIERS.OWNER,
-  resources:     TIERS.OWNER,
-  mem:           TIERS.OWNER,
-  memory:        TIERS.OWNER,
-  // Plugin management — OWNER only
-  plugins:       TIERS.OWNER,
-  plugin:        TIERS.OWNER,
-  // Role management — OWNER only
-  roles:         TIERS.OWNER,
-  reload:        TIERS.OWNER,
-  'add-mod':     TIERS.OWNER,
-  'remove-mod':  TIERS.OWNER,
-  'add-mcmod':   TIERS.OWNER,
-  'remove-mcmod':TIERS.OWNER
+  // ── MANAGER + ADMIN + OWNER ──────────────────────────────────────────────
+  help:              TIERS.MANAGER,
+  status:            TIERS.MANAGER,
+  health:            TIERS.MANAGER,
+  logs:              TIERS.MANAGER,
+
+  // ── ADMIN + OWNER ────────────────────────────────────────────────────────
+  chat:              TIERS.ADMIN,
+  follow:            TIERS.ADMIN,
+  stop:              TIERS.ADMIN,
+  go:                TIERS.ADMIN,
+  // Manager role management (ADMIN can manage Managers)
+  'add-manager':     TIERS.ADMIN,
+  'remove-manager':  TIERS.ADMIN,
+  'add-mcmanager':   TIERS.ADMIN,
+  'remove-mcmanager':TIERS.ADMIN,
+
+  // ── OWNER only ───────────────────────────────────────────────────────────
+  connect:           TIERS.OWNER,
+  disconnect:        TIERS.OWNER,
+  ai:                TIERS.OWNER,
+  resources:         TIERS.OWNER,
+  mem:               TIERS.OWNER,
+  memory:            TIERS.OWNER,
+  plugins:           TIERS.OWNER,
+  plugin:            TIERS.OWNER,
+  roles:             TIERS.OWNER,
+  reload:            TIERS.OWNER,
+  // Admin role management (OWNER only)
+  'add-admin':       TIERS.OWNER,
+  'remove-admin':    TIERS.OWNER,
+  'add-mcadmin':     TIERS.OWNER,
+  'remove-mcadmin':  TIERS.OWNER,
+  // Legacy aliases (kept for backward compat, map to manager tier)
+  'add-mod':         TIERS.OWNER,
+  'remove-mod':      TIERS.OWNER,
+  'add-mcmod':       TIERS.OWNER,
+  'remove-mcmod':    TIERS.OWNER
 });
 
 const MC_PERMISSIONS = Object.freeze({
-  // MOD + OWNER
-  help:       TIERS.MOD,
-  status:     TIERS.MOD,
-  follow:     TIERS.MOD,
-  come:       TIERS.MOD,
-  // OWNER only
-  stop:       TIERS.OWNER,
-  protect:    TIERS.OWNER,
-  goto:       TIERS.OWNER,
-  attack:     TIERS.OWNER,
-  mine_block: TIERS.OWNER,
-  mine_iron:  TIERS.OWNER,
-  mine_area:  TIERS.OWNER,
-  wood:       TIERS.OWNER,
-  eat:        TIERS.OWNER,
-  food:       TIERS.OWNER,
-  pay:        TIERS.OWNER,
-  balance:    TIERS.OWNER,
-  jump:       TIERS.OWNER,
-  look:       TIERS.OWNER
+  // ── MANAGER + ADMIN + OWNER ──────────────────────────────────────────────
+  help:          TIERS.MANAGER,
+  status:        TIERS.MANAGER,
+  follow:        TIERS.MANAGER,
+  come:          TIERS.MANAGER,
+  mine_block:    TIERS.MANAGER,
+  mine_iron:     TIERS.MANAGER,
+  wood:          TIERS.MANAGER,
+  eat:           TIERS.MANAGER,
+  food:          TIERS.MANAGER,
+
+  // ── ADMIN + OWNER ────────────────────────────────────────────────────────
+  stop:          TIERS.ADMIN,
+  protect:       TIERS.ADMIN,
+  goto:          TIERS.ADMIN,
+  attack:        TIERS.ADMIN,
+  pay:           TIERS.ADMIN,
+  balance:       TIERS.ADMIN,
+  jump:          TIERS.ADMIN,
+  look:          TIERS.ADMIN,
+  mine_area:     TIERS.ADMIN,
+  // Manager role management (ADMIN+)
+  add_manager:   TIERS.ADMIN,
+  remove_manager:TIERS.ADMIN,
+
+  // ── OWNER only ───────────────────────────────────────────────────────────
+  add_admin:     TIERS.OWNER,
+  remove_admin:  TIERS.OWNER
 });
 
 // ─── File Overrides ───────────────────────────────────────────────────────────
-// Stored in config/roles.json — updated by role-management Discord commands.
-// Keys: ownerDiscordId, ownerMcName, modDiscordIds[], modMcNames[]
+// Stored in config/roles.json — updated by role-management commands.
+// Schema: { ownerDiscordId, ownerMcName,
+//           adminDiscordIds[], adminMcNames[],
+//           managerDiscordIds[], managerMcNames[] }
 
 const OVERRIDE_FILE = path.join(__dirname, 'roles.json');
 let _overrides = {};
@@ -93,7 +125,15 @@ let _overrides = {};
 function _loadOverrides() {
   try {
     if (fs.existsSync(OVERRIDE_FILE)) {
-      _overrides = JSON.parse(fs.readFileSync(OVERRIDE_FILE, 'utf8'));
+      const raw = JSON.parse(fs.readFileSync(OVERRIDE_FILE, 'utf8'));
+      // ── Migrate legacy keys (modDiscordIds → managerDiscordIds) ──────────
+      if (!raw.managerDiscordIds && raw.modDiscordIds) {
+        raw.managerDiscordIds = raw.modDiscordIds;
+      }
+      if (!raw.managerMcNames && raw.modMcNames) {
+        raw.managerMcNames = raw.modMcNames;
+      }
+      _overrides = raw;
     } else {
       _overrides = {};
     }
@@ -120,6 +160,38 @@ function saveOverrides(patch) {
   _overrides = merged;
 }
 
+/**
+ * Append a value to a named list in roles.json.
+ * Returns true if the value was added, false if it was already present.
+ */
+function addToRole(field, value) {
+  _loadOverrides();
+  const arr = Array.isArray(_overrides[field]) ? _overrides[field] : [];
+  if (arr.includes(value)) return false;
+  saveOverrides({ [field]: [...arr, value] });
+  return true;
+}
+
+/**
+ * Remove a value from a named list in roles.json.
+ * Returns true if the value was removed, false if it was not found.
+ */
+function removeFromRole(field, value) {
+  _loadOverrides();
+  const arr = Array.isArray(_overrides[field]) ? _overrides[field] : [];
+  if (!arr.includes(value)) return false;
+  saveOverrides({ [field]: arr.filter(v => v !== value) });
+  return true;
+}
+
+/**
+ * Returns true if actorTier is strictly higher than targetTier.
+ * Used to verify a user can only modify roles below their own level.
+ */
+function canModifyTier(actorTier, targetTier) {
+  return actorTier > targetTier;
+}
+
 /** Return the merged config: file overrides take priority over env vars. */
 function getConfig() {
   return {
@@ -127,18 +199,32 @@ function getConfig() {
       || process.env.OWNER_DISCORD_ID
       || '',
 
-    ownerMcName:    _overrides.ownerMcName
+    ownerMcName: _overrides.ownerMcName
       || process.env.OWNER_MC_NAME
       || process.env.AUTHORIZED_USER
       || 'roaz',
 
-    modDiscordIds: Array.isArray(_overrides.modDiscordIds)
-      ? _overrides.modDiscordIds
-      : (process.env.MODERATOR_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean),
+    adminDiscordIds: Array.isArray(_overrides.adminDiscordIds)
+      ? _overrides.adminDiscordIds
+      : (process.env.ADMIN_DISCORD_IDS || '').split(',').map(s => s.trim()).filter(Boolean),
 
-    modMcNames: Array.isArray(_overrides.modMcNames)
-      ? _overrides.modMcNames
-      : (process.env.MODERATOR_MC_NAMES || '').split(',').map(s => s.trim()).filter(Boolean)
+    adminMcNames: Array.isArray(_overrides.adminMcNames)
+      ? _overrides.adminMcNames
+      : (process.env.ADMIN_MC_NAMES || '').split(',').map(s => s.trim()).filter(Boolean),
+
+    managerDiscordIds: Array.isArray(_overrides.managerDiscordIds)
+      ? _overrides.managerDiscordIds
+      : (process.env.MANAGER_DISCORD_IDS || process.env.MODERATOR_DISCORD_IDS || '')
+          .split(',').map(s => s.trim()).filter(Boolean),
+
+    managerMcNames: Array.isArray(_overrides.managerMcNames)
+      ? _overrides.managerMcNames
+      : (process.env.MANAGER_MC_NAMES || process.env.MODERATOR_MC_NAMES || '')
+          .split(',').map(s => s.trim()).filter(Boolean),
+
+    // ── Legacy aliases ─────────────────────────────────────────────────────
+    get modDiscordIds() { return this.managerDiscordIds; },
+    get modMcNames()    { return this.managerMcNames;    }
   };
 }
 
@@ -146,12 +232,10 @@ function getConfig() {
 function getDiscordTier(userId) {
   if (!userId) return TIERS.NONE;
   const cfg = getConfig();
-  if (!cfg.ownerDiscordId) {
-    // OWNER_DISCORD_ID not configured — log once and grant no implicit access
-    return TIERS.NONE;
-  }
-  if (userId === cfg.ownerDiscordId) return TIERS.OWNER;
-  if (cfg.modDiscordIds.includes(userId)) return TIERS.MOD;
+  if (!cfg.ownerDiscordId) return TIERS.NONE;
+  if (userId === cfg.ownerDiscordId)          return TIERS.OWNER;
+  if (cfg.adminDiscordIds.includes(userId))   return TIERS.ADMIN;
+  if (cfg.managerDiscordIds.includes(userId)) return TIERS.MANAGER;
   return TIERS.NONE;
 }
 
@@ -159,20 +243,18 @@ function getDiscordTier(userId) {
 function getMcTier(username) {
   if (!username) return TIERS.NONE;
   const cfg = getConfig();
-  if (username === cfg.ownerMcName) return TIERS.OWNER;
-  if (cfg.modMcNames.includes(username)) return TIERS.MOD;
+  if (username === cfg.ownerMcName)       return TIERS.OWNER;
+  if (cfg.adminMcNames.includes(username))   return TIERS.ADMIN;
+  if (cfg.managerMcNames.includes(username)) return TIERS.MANAGER;
   return TIERS.NONE;
 }
 
 /** True if a Discord user can run `cmd`. */
 function canDiscord(userId, cmd) {
   const cfg = getConfig();
-  if (!cfg.ownerDiscordId) {
-    // RBAC not fully configured — open access with warning
-    return true;
-  }
-  const userTier    = getDiscordTier(userId);
-  const required    = DISCORD_PERMISSIONS[cmd] !== undefined
+  if (!cfg.ownerDiscordId) return true; // RBAC not configured — open with warning
+  const userTier = getDiscordTier(userId);
+  const required = DISCORD_PERMISSIONS[cmd] !== undefined
     ? DISCORD_PERMISSIONS[cmd]
     : TIERS.OWNER;
   return userTier >= required;
@@ -190,8 +272,9 @@ function canMinecraft(username, cmd) {
 
 /** Human-readable tier name. */
 function tierName(tier) {
-  if (tier === TIERS.OWNER) return 'Owner';
-  if (tier === TIERS.MOD)   return 'Moderator';
+  if (tier === TIERS.OWNER)   return 'Owner';
+  if (tier === TIERS.ADMIN)   return 'Admin';
+  if (tier === TIERS.MANAGER) return 'Manager';
   return 'None';
 }
 
@@ -202,6 +285,9 @@ module.exports = {
   getConfig,
   reloadRoles,
   saveOverrides,
+  addToRole,
+  removeFromRole,
+  canModifyTier,
   getDiscordTier,
   getMcTier,
   canDiscord,

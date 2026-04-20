@@ -4,17 +4,15 @@
  * DiscordBridge — Pro-level Discord bot integration for FAERO
  *
  * Prefix  : !bot <command>
- * Security: RBAC tier check before every command.
+ * Security: Strict RBAC tier check before every command.
  *           Per-user rate limit  (DISCORD_RATE_LIMIT_MS, default 3 s).
  *           Global rate limit    (DISCORD_GLOBAL_RATE_LIMIT, default 30 cmds / 60 s).
  *
- * Compliance: No unauthorized network access. All actions map to legitimate
- *   mineflayer gameplay only. Personal, non-commercial use. See README.md.
- *
  * RBAC tiers (from config/roles.js)
- *   OWNER  — full access, role management, resource admin, plugin control
- *   MOD    — help, status, health, logs
- *   NONE   — blocked with a clear denial message
+ *   OWNER   — full access, all role management
+ *   ADMIN   — full functional access, can manage Managers only
+ *   MANAGER — help, status, health, logs only
+ *   NONE    — blocked with a clear denial message
  */
 
 const { Client, GatewayIntentBits, Events, EmbedBuilder } = require('discord.js');
@@ -35,14 +33,9 @@ class DiscordBridge {
     this.guildId      = process.env.DISCORD_GUILD_ID       || null;
     this._logListener = null;
 
-    // Per-user cooldown map: userId → last-command timestamp
     this._userCooldowns = new Map();
-
-    // Global sliding-window bucket: array of command timestamps
-    this._globalBucket = [];
-
-    // Monitor reference injected by app.js
-    this._monitor = null;
+    this._globalBucket  = [];
+    this._monitor       = null;
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -103,10 +96,8 @@ class DiscordBridge {
         return;
       }
 
-      // Both limits passed — record the command
       this._userCooldowns.set(userId, now);
       this._globalBucket.push(now);
-
       this._handleMessage(message);
     });
 
@@ -172,8 +163,11 @@ class DiscordBridge {
           : '`OWNER_DISCORD_ID` is not configured — RBAC is not active yet.';
         return reply('🚫 **Access Denied** — ' + hint);
       }
+      const required = roles.DISCORD_PERMISSIONS[cmd] !== undefined
+        ? roles.DISCORD_PERMISSIONS[cmd] : roles.TIERS.OWNER;
       return reply(
-        '🔒 **Permission Denied** — `' + PREFIX + ' ' + cmd + '` requires **Owner** access.\n' +
+        '🔒 **Permission Denied** — `' + PREFIX + ' ' + cmd + '` requires **' +
+        roles.tierName(required) + '** access.\n' +
         'Your role: **' + roles.tierName(userTier) + '**'
       );
     }
@@ -184,36 +178,48 @@ class DiscordBridge {
 
       // ── Help ───────────────────────────────────────────────────────────
       case 'help': {
-        const isMod = userTier === roles.TIERS.MOD;
+        const isManager = userTier === roles.TIERS.MANAGER;
+        const isAdmin   = userTier === roles.TIERS.ADMIN;
         const embed = new EmbedBuilder()
           .setColor(0x39FF14)
           .setTitle('FAERO Bot — Commands  [Role: ' + roles.tierName(userTier) + ']')
           .setDescription('Prefix: `' + PREFIX + ' <command>`')
           .addFields(
-            { name: '`status`',    value: 'Full bot status',            inline: true },
-            { name: '`health`',    value: 'HP & hunger',                inline: true },
-            { name: '`logs [n]`',  value: 'Last n log lines (max 10)',  inline: true }
+            { name: '`status`',   value: 'Full bot status',           inline: true },
+            { name: '`health`',   value: 'HP & hunger',               inline: true },
+            { name: '`logs [n]`', value: 'Last n log lines (max 10)', inline: true }
           );
-        if (!isMod) {
+
+        if (isAdmin || userTier === roles.TIERS.OWNER) {
           embed.addFields(
-            { name: '`resources`',                     value: 'RAM / CPU / uptime report',    inline: true },
-            { name: '`connect`',                       value: 'Connect to Minecraft',         inline: true },
-            { name: '`disconnect`',                    value: 'Disconnect bot',               inline: true },
-            { name: '`chat <message>`',                value: 'Relay message to Minecraft',   inline: true },
-            { name: '`follow`',                        value: 'Follow authorized player',     inline: true },
-            { name: '`stop`',                          value: 'Stop current action',          inline: true },
-            { name: '`go <x> <y> <z>`',               value: 'Navigate to coordinates',      inline: true },
-            { name: '`ai on|off`',                     value: 'Toggle AI brain',              inline: true },
-            { name: '`plugins`',                       value: 'List all plugins & status',    inline: true },
-            { name: '`plugin enable|disable <name>`',  value: 'Toggle a plugin at runtime',   inline: true },
-            { name: '`roles`',                         value: 'View RBAC config',             inline: true },
-            { name: '`add-mod <id>`',                  value: 'Add Discord moderator',        inline: true },
-            { name: '`remove-mod <id>`',               value: 'Remove Discord moderator',     inline: true },
-            { name: '`add-mcmod <name>`',              value: 'Add MC moderator',             inline: true },
-            { name: '`remove-mcmod <n>`',              value: 'Remove MC moderator',          inline: true },
-            { name: '`reload`',                        value: 'Reload roles from file',       inline: true }
+            { name: '`chat <message>`',   value: 'Relay message to Minecraft', inline: true },
+            { name: '`follow`',           value: 'Follow authorized player',   inline: true },
+            { name: '`stop`',             value: 'Stop current action',        inline: true },
+            { name: '`go <x> <y> <z>`',  value: 'Navigate to coordinates',    inline: true },
+            { name: '`add-manager <id>`',    value: 'Add Discord Manager',     inline: true },
+            { name: '`remove-manager <id>`', value: 'Remove Discord Manager',  inline: true },
+            { name: '`add-mcmanager <n>`',   value: 'Add MC Manager',          inline: true },
+            { name: '`remove-mcmanager <n>`',value: 'Remove MC Manager',       inline: true }
           );
         }
+
+        if (userTier === roles.TIERS.OWNER) {
+          embed.addFields(
+            { name: '`resources`',                    value: 'RAM / CPU / uptime report',   inline: true },
+            { name: '`connect`',                      value: 'Connect to Minecraft',        inline: true },
+            { name: '`disconnect`',                   value: 'Disconnect bot',              inline: true },
+            { name: '`ai on|off`',                    value: 'Toggle AI brain',             inline: true },
+            { name: '`plugins`',                      value: 'List all plugins & status',   inline: true },
+            { name: '`plugin enable|disable <name>`', value: 'Toggle a plugin at runtime',  inline: true },
+            { name: '`roles`',                        value: 'View RBAC config',            inline: true },
+            { name: '`reload`',                       value: 'Reload roles from file',      inline: true },
+            { name: '`add-admin <id>`',               value: 'Add Discord Admin',           inline: true },
+            { name: '`remove-admin <id>`',            value: 'Remove Discord Admin',        inline: true },
+            { name: '`add-mcadmin <name>`',           value: 'Add MC Admin',                inline: true },
+            { name: '`remove-mcadmin <name>`',        value: 'Remove MC Admin',             inline: true }
+          );
+        }
+
         embed.setFooter({ text: 'FAERO Minecraft AI • Personal use only' });
         return replyEmbed(embed);
       }
@@ -367,11 +373,7 @@ class DiscordBridge {
           .setDescription('Use `!bot plugin enable/disable <name>` to toggle.');
         for (const p of list) {
           const status = p.enabled ? '🟢 Enabled' : '🔴 Disabled';
-          embed.addFields({
-            name:   status + ' — `' + p.name + '` v' + p.version,
-            value:  p.description || '—',
-            inline: false
-          });
+          embed.addFields({ name: status + ' — `' + p.name + '` v' + p.version, value: p.description || '—', inline: false });
         }
         embed.setFooter({ text: 'FAERO Minecraft AI • Personal use only' });
         return replyEmbed(embed);
@@ -381,7 +383,6 @@ class DiscordBridge {
       case 'plugin': {
         const action     = (args[0] || '').toLowerCase();
         const pluginName = (args[1] || '').toLowerCase();
-
         if (!['enable', 'disable'].includes(action) || !pluginName) {
           return reply('❌ Usage: `' + PREFIX + ' plugin enable|disable <name>`');
         }
@@ -389,9 +390,7 @@ class DiscordBridge {
           const changed = action === 'enable'
             ? bm.pluginLoader.enable(pluginName, bm)
             : bm.pluginLoader.disable(pluginName, bm);
-          if (!changed) {
-            return reply('ℹ️ Plugin `' + pluginName + '` is already ' + action + 'd.');
-          }
+          if (!changed) return reply('ℹ️ Plugin `' + pluginName + '` is already ' + action + 'd.');
           bm.log('[rbac] Plugin ' + action + 'd: ' + pluginName + ' by ' + message.author.tag);
           return reply('✅ Plugin `' + pluginName + '` ' + action + 'd successfully.');
         } catch (err) {
@@ -406,12 +405,14 @@ class DiscordBridge {
           .setColor(0x39FF14)
           .setTitle('FAERO — RBAC Role Config')
           .addFields(
-            { name: '👑 Owner Discord ID', value: cfg.ownerDiscordId || '*(not set — set OWNER_DISCORD_ID secret)*', inline: false },
-            { name: '⚔️ Owner MC Name',    value: cfg.ownerMcName,                                                   inline: false },
-            { name: '🛡 Mod Discord IDs',  value: cfg.modDiscordIds.join('\n') || '*(none)*',                        inline: false },
-            { name: '🛡 Mod MC Names',     value: cfg.modMcNames.join(', ')   || '*(none)*',                        inline: false }
+            { name: '👑 Owner Discord ID',    value: cfg.ownerDiscordId   || '*(not set — set OWNER_DISCORD_ID secret)*', inline: false },
+            { name: '⚔️ Owner MC Name',       value: cfg.ownerMcName,                                                     inline: false },
+            { name: '🛡 Admin Discord IDs',   value: cfg.adminDiscordIds.join('\n')   || '*(none)*',                       inline: false },
+            { name: '🛡 Admin MC Names',      value: cfg.adminMcNames.join(', ')      || '*(none)*',                       inline: false },
+            { name: '🔧 Manager Discord IDs', value: cfg.managerDiscordIds.join('\n') || '*(none)*',                       inline: false },
+            { name: '🔧 Manager MC Names',    value: cfg.managerMcNames.join(', ')    || '*(none)*',                       inline: false }
           )
-          .setFooter({ text: 'Use add-mod / remove-mod to update. Changes apply instantly.' });
+          .setFooter({ text: 'Use add-admin / add-manager commands to update. Changes apply instantly.' });
         return replyEmbed(embed);
       }
 
@@ -422,48 +423,149 @@ class DiscordBridge {
         return reply('✅ Role config reloaded from file. Changes are now active.');
       }
 
-      // ── RBAC: Add Discord moderator ─────────────────────────────────────
+      // ── RBAC: Add Admin (Discord) — OWNER only ──────────────────────────
+      case 'add-admin': {
+        const targetId = args[0] ? args[0].replace(/[<@!>]/g, '') : null;
+        if (!targetId) return reply('❌ Usage: `' + PREFIX + ' add-admin <userId>` (or @mention)');
+        if (targetId === roles.getConfig().ownerDiscordId) {
+          return reply('🚫 Cannot modify the Owner\'s role.');
+        }
+        const added = roles.addToRole('adminDiscordIds', targetId);
+        if (!added) return reply('ℹ️ `' + targetId + '` is already an Admin.');
+        // Remove from Manager list if present (promotion)
+        roles.removeFromRole('managerDiscordIds', targetId);
+        bm.log('[rbac] Discord Admin added: ' + targetId + ' by ' + message.author.tag);
+        return reply('✅ Granted **Admin** role to `' + targetId + '`.\nThey now have full functional access and can manage Managers.');
+      }
+
+      // ── RBAC: Remove Admin (Discord) — OWNER only ───────────────────────
+      case 'remove-admin': {
+        const targetId = args[0] ? args[0].replace(/[<@!>]/g, '') : null;
+        if (!targetId) return reply('❌ Usage: `' + PREFIX + ' remove-admin <userId>` (or @mention)');
+        if (targetId === roles.getConfig().ownerDiscordId) {
+          return reply('🚫 Cannot modify the Owner\'s role.');
+        }
+        const removed = roles.removeFromRole('adminDiscordIds', targetId);
+        if (!removed) return reply('ℹ️ `' + targetId + '` is not an Admin.');
+        bm.log('[rbac] Discord Admin removed: ' + targetId + ' by ' + message.author.tag);
+        return reply('✅ Revoked **Admin** role from `' + targetId + '`. They now have no access.');
+      }
+
+      // ── RBAC: Add Admin (MC) — OWNER only ──────────────────────────────
+      case 'add-mcadmin': {
+        const name = args[0];
+        if (!name) return reply('❌ Usage: `' + PREFIX + ' add-mcadmin <MinecraftUsername>`');
+        const cfg = roles.getConfig();
+        if (name === cfg.ownerMcName) return reply('🚫 Cannot modify the Owner\'s role.');
+        const added = roles.addToRole('adminMcNames', name);
+        if (!added) return reply('ℹ️ `' + name + '` is already an MC Admin.');
+        roles.removeFromRole('managerMcNames', name);
+        bm.log('[rbac] MC Admin added: ' + name + ' by ' + message.author.tag);
+        return reply('✅ Granted **Admin** role to MC player `' + name + '`.\nThey have full functional access + can manage Managers in-game.');
+      }
+
+      // ── RBAC: Remove Admin (MC) — OWNER only ───────────────────────────
+      case 'remove-mcadmin': {
+        const name = args[0];
+        if (!name) return reply('❌ Usage: `' + PREFIX + ' remove-mcadmin <MinecraftUsername>`');
+        if (name === roles.getConfig().ownerMcName) return reply('🚫 Cannot modify the Owner\'s role.');
+        const removed = roles.removeFromRole('adminMcNames', name);
+        if (!removed) return reply('ℹ️ `' + name + '` is not an MC Admin.');
+        bm.log('[rbac] MC Admin removed: ' + name + ' by ' + message.author.tag);
+        return reply('✅ Revoked **Admin** role from MC player `' + name + '`. They now have no access.');
+      }
+
+      // ── RBAC: Add Manager (Discord) — ADMIN + OWNER ─────────────────────
+      case 'add-manager': {
+        const targetId = args[0] ? args[0].replace(/[<@!>]/g, '') : null;
+        if (!targetId) return reply('❌ Usage: `' + PREFIX + ' add-manager <userId>` (or @mention)');
+        const targetTier = roles.getDiscordTier(targetId);
+        if (!roles.canModifyTier(userTier, targetTier)) {
+          return reply('🚫 **Hierarchy violation** — you cannot modify `' + targetId + '` (their tier: **' + roles.tierName(targetTier) + '** ≥ yours: **' + roles.tierName(userTier) + '**).');
+        }
+        const added = roles.addToRole('managerDiscordIds', targetId);
+        if (!added) return reply('ℹ️ `' + targetId + '` is already a Manager.');
+        bm.log('[rbac] Discord Manager added: ' + targetId + ' by ' + message.author.tag);
+        return reply('✅ Granted **Manager** role to `' + targetId + '`.\nThey now have access to: status, health, logs, help.');
+      }
+
+      // ── RBAC: Remove Manager (Discord) — ADMIN + OWNER ──────────────────
+      case 'remove-manager': {
+        const targetId = args[0] ? args[0].replace(/[<@!>]/g, '') : null;
+        if (!targetId) return reply('❌ Usage: `' + PREFIX + ' remove-manager <userId>` (or @mention)');
+        const targetTier = roles.getDiscordTier(targetId);
+        if (!roles.canModifyTier(userTier, targetTier)) {
+          return reply('🚫 **Hierarchy violation** — you cannot modify `' + targetId + '` (their tier: **' + roles.tierName(targetTier) + '** ≥ yours: **' + roles.tierName(userTier) + '**).');
+        }
+        const removed = roles.removeFromRole('managerDiscordIds', targetId);
+        if (!removed) return reply('ℹ️ `' + targetId + '` is not a Manager.');
+        bm.log('[rbac] Discord Manager removed: ' + targetId + ' by ' + message.author.tag);
+        return reply('✅ Revoked **Manager** role from `' + targetId + '`.');
+      }
+
+      // ── RBAC: Add Manager (MC) — ADMIN + OWNER ──────────────────────────
+      case 'add-mcmanager': {
+        const name = args[0];
+        if (!name) return reply('❌ Usage: `' + PREFIX + ' add-mcmanager <MinecraftUsername>`');
+        const targetTier = roles.getMcTier(name);
+        if (!roles.canModifyTier(userTier, targetTier)) {
+          return reply('🚫 **Hierarchy violation** — you cannot modify `' + name + '` (their tier: **' + roles.tierName(targetTier) + '** ≥ yours: **' + roles.tierName(userTier) + '**).');
+        }
+        const added = roles.addToRole('managerMcNames', name);
+        if (!added) return reply('ℹ️ `' + name + '` is already an MC Manager.');
+        bm.log('[rbac] MC Manager added: ' + name + ' by ' + message.author.tag);
+        return reply('✅ Granted **Manager** role to MC player `' + name + '`.\nThey can use: !help !status !follow !come !mine in-game.');
+      }
+
+      // ── RBAC: Remove Manager (MC) — ADMIN + OWNER ───────────────────────
+      case 'remove-mcmanager': {
+        const name = args[0];
+        if (!name) return reply('❌ Usage: `' + PREFIX + ' remove-mcmanager <MinecraftUsername>`');
+        const targetTier = roles.getMcTier(name);
+        if (!roles.canModifyTier(userTier, targetTier)) {
+          return reply('🚫 **Hierarchy violation** — you cannot modify `' + name + '` (their tier: **' + roles.tierName(targetTier) + '** ≥ yours: **' + roles.tierName(userTier) + '**).');
+        }
+        const removed = roles.removeFromRole('managerMcNames', name);
+        if (!removed) return reply('ℹ️ `' + name + '` is not an MC Manager.');
+        bm.log('[rbac] MC Manager removed: ' + name + ' by ' + message.author.tag);
+        return reply('✅ Revoked **Manager** role from MC player `' + name + '`.');
+      }
+
+      // ── RBAC: Legacy aliases (map to manager for backward compat) ────────
       case 'add-mod': {
         const targetId = args[0] ? args[0].replace(/[<@!>]/g, '') : null;
-        if (!targetId) return reply('❌ Usage: `' + PREFIX + ' add-mod <userId>` (or @mention)');
-        const cfg = roles.getConfig();
-        if (cfg.modDiscordIds.includes(targetId)) return reply('ℹ️ `' + targetId + '` is already a moderator.');
-        roles.saveOverrides({ modDiscordIds: [...cfg.modDiscordIds, targetId] });
-        bm.log('[rbac] Discord mod added: ' + targetId + ' by ' + message.author.tag);
-        return reply('✅ Added Discord moderator: `' + targetId + '`\nThey now have access to: status, health, logs, help.');
+        if (!targetId) return reply('❌ Usage: `' + PREFIX + ' add-mod <userId>`\n*(This is a legacy alias for `add-manager`)*');
+        const added = roles.addToRole('managerDiscordIds', targetId);
+        if (!added) return reply('ℹ️ `' + targetId + '` is already a Manager.');
+        bm.log('[rbac] Discord Manager added (legacy add-mod): ' + targetId + ' by ' + message.author.tag);
+        return reply('✅ Added Manager (legacy): `' + targetId + '`');
       }
 
-      // ── RBAC: Remove Discord moderator ──────────────────────────────────
       case 'remove-mod': {
         const targetId = args[0] ? args[0].replace(/[<@!>]/g, '') : null;
-        if (!targetId) return reply('❌ Usage: `' + PREFIX + ' remove-mod <userId>` (or @mention)');
-        const cfg = roles.getConfig();
-        if (!cfg.modDiscordIds.includes(targetId)) return reply('ℹ️ `' + targetId + '` is not a moderator.');
-        roles.saveOverrides({ modDiscordIds: cfg.modDiscordIds.filter(id => id !== targetId) });
-        bm.log('[rbac] Discord mod removed: ' + targetId + ' by ' + message.author.tag);
-        return reply('✅ Removed Discord moderator: `' + targetId + '`');
+        if (!targetId) return reply('❌ Usage: `' + PREFIX + ' remove-mod <userId>`\n*(This is a legacy alias for `remove-manager`)*');
+        const removed = roles.removeFromRole('managerDiscordIds', targetId);
+        if (!removed) return reply('ℹ️ `' + targetId + '` is not a Manager.');
+        bm.log('[rbac] Discord Manager removed (legacy remove-mod): ' + targetId + ' by ' + message.author.tag);
+        return reply('✅ Removed Manager (legacy): `' + targetId + '`');
       }
 
-      // ── RBAC: Add MC moderator ──────────────────────────────────────────
       case 'add-mcmod': {
         const name = args[0];
-        if (!name) return reply('❌ Usage: `' + PREFIX + ' add-mcmod <MinecraftUsername>`');
-        const cfg = roles.getConfig();
-        if (cfg.modMcNames.includes(name)) return reply('ℹ️ `' + name + '` is already an MC moderator.');
-        roles.saveOverrides({ modMcNames: [...cfg.modMcNames, name] });
-        bm.log('[rbac] MC mod added: ' + name + ' by ' + message.author.tag);
-        return reply('✅ Added MC moderator: `' + name + '`\nThey can now use: !help !status !follow !come in-game.');
+        if (!name) return reply('❌ Usage: `' + PREFIX + ' add-mcmod <MinecraftUsername>`\n*(Legacy alias for `add-mcmanager`)*');
+        const added = roles.addToRole('managerMcNames', name);
+        if (!added) return reply('ℹ️ `' + name + '` is already an MC Manager.');
+        bm.log('[rbac] MC Manager added (legacy add-mcmod): ' + name + ' by ' + message.author.tag);
+        return reply('✅ Added MC Manager (legacy): `' + name + '`');
       }
 
-      // ── RBAC: Remove MC moderator ───────────────────────────────────────
       case 'remove-mcmod': {
         const name = args[0];
-        if (!name) return reply('❌ Usage: `' + PREFIX + ' remove-mcmod <MinecraftUsername>`');
-        const cfg = roles.getConfig();
-        if (!cfg.modMcNames.includes(name)) return reply('ℹ️ `' + name + '` is not an MC moderator.');
-        roles.saveOverrides({ modMcNames: cfg.modMcNames.filter(n => n !== name) });
-        bm.log('[rbac] MC mod removed: ' + name + ' by ' + message.author.tag);
-        return reply('✅ Removed MC moderator: `' + name + '`');
+        if (!name) return reply('❌ Usage: `' + PREFIX + ' remove-mcmod <MinecraftUsername>`\n*(Legacy alias for `remove-mcmanager`)*');
+        const removed = roles.removeFromRole('managerMcNames', name);
+        if (!removed) return reply('ℹ️ `' + name + '` is not an MC Manager.');
+        bm.log('[rbac] MC Manager removed (legacy remove-mcmod): ' + name + ' by ' + message.author.tag);
+        return reply('✅ Removed MC Manager (legacy): `' + name + '`');
       }
 
       default:

@@ -7,17 +7,23 @@
  *   - Unauthorized users are silently ignored (no info disclosure)
  *   - All actions are rate-limited via commandCooldownMs
  *
+ * TIER HIERARCHY
+ *   MANAGER (1) — mine, move, follow, come, help, status
+ *   ADMIN   (2) — everything Manager has + stop, protect, goto, attack, pay, balance
+ *                 + can add/remove Managers (!addManager / !removeManager)
+ *   OWNER   (3) — unrestricted + can add/remove Admins (!addAdmin / !removeAdmin)
+ *
  * Personal, non-commercial use only. See README.md.
  */
 
 'use strict';
 
-const survival = require('./survival');
-const combat   = require('./combat');
+const survival    = require('./survival');
+const combat      = require('./combat');
 const pathfinding = require('./pathfinding');
-const economy  = require('./economy');
-const { STATES } = require('../core/stateManager');
-const roles    = require('../config/roles');
+const economy     = require('./economy');
+const { STATES }  = require('../core/stateManager');
+const roles       = require('../config/roles');
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -68,6 +74,20 @@ function parseIntent(text) {
 
   let m;
 
+  // ── Role management ──────────────────────────────────────────────────────
+  m = text.match(/^(?:add[\s_-]?admin)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'add_admin', target: m[1] };
+
+  m = text.match(/^(?:remove[\s_-]?admin|revoke[\s_-]?admin)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'remove_admin', target: m[1] };
+
+  m = text.match(/^(?:add[\s_-]?manager)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'add_manager', target: m[1] };
+
+  m = text.match(/^(?:remove[\s_-]?manager|revoke[\s_-]?manager)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'remove_manager', target: m[1] };
+
+  // ── Combat / movement / economy ──────────────────────────────────────────
   m = text.match(/^(?:attack|kill|fight|destroy|eliminate|target)\s+([a-z0-9_]+)$/);
   if (m) return { cmd: 'attack', target: m[1] };
 
@@ -131,7 +151,6 @@ function stopGuardianMode(ctx) {
 /**
  * handleChat — called from botManager on every in-game chat event.
  * Silently ignores non-! messages and unauthorized players.
- * Tells MODs when they try an OWNER-only command.
  */
 function handleChat(ctx, username, message) {
   if (username === ctx.bot.username) return false;
@@ -141,7 +160,7 @@ function handleChat(ctx, username, message) {
 
   const tier = roles.getMcTier(username);
 
-  // Silently ignore completely unknown users — gives no information to potential attackers
+  // Silently ignore completely unknown users — no info disclosure to potential attackers
   if (tier === roles.TIERS.NONE) return false;
 
   const body = raw.slice(1).trim();
@@ -168,7 +187,12 @@ function handleCommand(ctx, username, message, tier) {
   // ── Permission check helper ──────────────────────────────────────────────
   function permitCmd(cmd) {
     if (roles.canMinecraft(username, cmd)) return true;
-    say(bot, 'Permission denied — [' + cmd + '] requires Owner access. Your role: ' + roles.tierName(userTier));
+    const required = roles.MC_PERMISSIONS[cmd] !== undefined
+      ? roles.MC_PERMISSIONS[cmd] : roles.TIERS.OWNER;
+    say(bot,
+      'Permission denied — [' + cmd + '] requires **' + roles.tierName(required) + '** access.' +
+      ' Your role: ' + roles.tierName(userTier)
+    );
     return false;
   }
 
@@ -211,10 +235,16 @@ function handleCommand(ctx, username, message, tier) {
 
     // ── Help ───────────────────────────────────────────────────────────────
     case 'help': {
-      const isMod = userTier === roles.TIERS.MOD;
-      bot.chat('[FAERO]: Your role: ' + roles.tierName(userTier));
-      bot.chat('[FAERO]: Available: !help !status' + (isMod ? ' !follow !come' : ' !follow !come !stop !protect !go !mine <block> [amount] !attack !eat !food'));
-      if (!isMod) bot.chat('[FAERO]: Owner-only: !stop !protect !go !mine <block> [1-256] !attack !eat !pay !bal');
+      const isManager = userTier === roles.TIERS.MANAGER;
+      const isAdmin   = userTier === roles.TIERS.ADMIN;
+      bot.chat('[FAERO]: Role: ' + roles.tierName(userTier));
+      bot.chat('[FAERO]: All roles: !help !status !follow !come !mine <block> [amount]');
+      if (isAdmin || userTier === roles.TIERS.OWNER) {
+        bot.chat('[FAERO]: Admin+: !stop !protect !go !mine !attack !eat !pay !bal !addManager <n> !removeManager <n>');
+      }
+      if (userTier === roles.TIERS.OWNER) {
+        bot.chat('[FAERO]: Owner: !addAdmin <n> !removeAdmin <n>');
+      }
       return true;
     }
 
@@ -383,6 +413,86 @@ function handleCommand(ctx, username, message, tier) {
       return commandTask('Balance', async () => {
         economy.requestBalance(bot);
       });
+
+    // ── Role Management ────────────────────────────────────────────────────
+
+    case 'add_admin': {
+      // OWNER-only (enforced by permitCmd)
+      const targetName = intent.target;
+      const cfg = roles.getConfig();
+      if (targetName === cfg.ownerMcName) {
+        say(bot, 'Cannot modify the Owner.');
+        return false;
+      }
+      const targetTier = roles.getMcTier(targetName);
+      if (targetTier === roles.TIERS.ADMIN) {
+        say(bot, targetName + ' is already an Admin.');
+        return false;
+      }
+      roles.addToRole('adminMcNames', targetName);
+      // Remove from Manager if they were one (promotion)
+      roles.removeFromRole('managerMcNames', targetName);
+      say(bot, 'Granted Admin role to ' + targetName + '. Full functional access enabled.');
+      return true;
+    }
+
+    case 'remove_admin': {
+      // OWNER-only (enforced by permitCmd)
+      const targetName = intent.target;
+      const cfg = roles.getConfig();
+      if (targetName === cfg.ownerMcName) {
+        say(bot, 'Cannot modify the Owner.');
+        return false;
+      }
+      const removed = roles.removeFromRole('adminMcNames', targetName);
+      if (!removed) {
+        say(bot, targetName + ' is not an Admin.');
+        return false;
+      }
+      say(bot, 'Revoked Admin role from ' + targetName + '. Access removed.');
+      return true;
+    }
+
+    case 'add_manager': {
+      // ADMIN+ (enforced by permitCmd)
+      // Hierarchy check: cannot modify anyone at own tier or above
+      const targetName = intent.target;
+      const targetTier = roles.getMcTier(targetName);
+      if (!roles.canModifyTier(userTier, targetTier)) {
+        say(bot,
+          'Hierarchy violation — ' + targetName + ' has ' + roles.tierName(targetTier) +
+          ' access (>= your ' + roles.tierName(userTier) + ' tier). Cannot modify.'
+        );
+        return false;
+      }
+      const added = roles.addToRole('managerMcNames', targetName);
+      if (!added) {
+        say(bot, targetName + ' is already a Manager.');
+        return false;
+      }
+      say(bot, 'Granted Manager role to ' + targetName + '. Operational access enabled.');
+      return true;
+    }
+
+    case 'remove_manager': {
+      // ADMIN+ (enforced by permitCmd)
+      const targetName = intent.target;
+      const targetTier = roles.getMcTier(targetName);
+      if (!roles.canModifyTier(userTier, targetTier)) {
+        say(bot,
+          'Hierarchy violation — ' + targetName + ' has ' + roles.tierName(targetTier) +
+          ' access (>= your ' + roles.tierName(userTier) + ' tier). Cannot modify.'
+        );
+        return false;
+      }
+      const removed = roles.removeFromRole('managerMcNames', targetName);
+      if (!removed) {
+        say(bot, targetName + ' is not a Manager.');
+        return false;
+      }
+      say(bot, 'Revoked Manager role from ' + targetName + '.');
+      return true;
+    }
 
     default:
       say(bot, 'Unknown command. Type !help to see available commands.');
