@@ -1,4 +1,4 @@
-const CACHE_NAME = 'faero-v1';
+const CACHE_NAME = 'faero-v2';
 const STATIC_ASSETS = [
   '/',
   '/style.css',

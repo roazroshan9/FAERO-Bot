@@ -10,7 +10,7 @@ const socket = io({
   timeout: 10000
 });
 
-const MAX_LOG_ENTRIES = 100;
+const MAX_LOG_ENTRIES = 50;
 let _savedWaypoint = null;
 let _statusRefreshTimer = null;
 
@@ -47,6 +47,8 @@ let metricsTimer = null;
 let panelUnlocked = false;
 let lowPowerMode = false;
 let aiModeEnabled = false;
+let _metricsLastRender = 0;
+const METRICS_THROTTLE_MS = 3000;
 
 const aiModeToggle = document.getElementById('aiModeToggle');
 aiModeToggle.addEventListener('click', () => {
@@ -268,6 +270,10 @@ async function fetchRuntimeMetrics() {
 }
 
 function renderRuntimeMetrics(metrics) {
+  const now = Date.now();
+  if (now - _metricsLastRender < METRICS_THROTTLE_MS) return;
+  _metricsLastRender = now;
+
   const cpuBox = els.cpuUsage.parentElement;
   const ramBox = els.ramUsage.parentElement;
 
