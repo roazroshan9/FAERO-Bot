@@ -23,12 +23,15 @@
 
 html {
   min-height: 100%;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: #0a0a0a;
 }
 
 body {
   margin: 0;
-  min-height: 100vh;
+  min-height: 100%;
   overflow-x: hidden;
   background:
     radial-gradient(circle at 12% 8%, rgba(0, 255, 255, 0.2), transparent 28rem),
@@ -1393,12 +1396,15 @@ pre {
   text-shadow: 0 0 12px rgba(255, 49, 95, 0.65) !important;
 }
 
-/* ── Mobile Sticky Game Controller ──────────────────────────── */
+/* ── Mobile Layout Fixes ─────────────────────────────────────── */
 @media (max-width: 860px) {
+  .shell {
+    padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+  }
+
   .advanced-panel {
-    position: sticky;
-    bottom: 8px;
-    z-index: 10;
+    position: static;
+    z-index: auto;
   }
 }
 
