@@ -31,7 +31,7 @@ function createWebServer(options) {
 
   const NO_CACHE = 'no-store, no-cache, must-revalidate, proxy-revalidate';
   const publicDir = path.join(__dirname, 'public');
-  ['/manifest.json', '/sw.js', '/faero-icon.png'].forEach((file) => {
+  ['/manifest.json', '/sw.js', '/faero-icon.png', '/faero-icon-512.png'].forEach((file) => {
     app.get(file, (req, res) => {
       res.setHeader('Cache-Control', NO_CACHE);
       res.setHeader('Pragma', 'no-cache');

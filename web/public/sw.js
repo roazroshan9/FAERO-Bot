@@ -1,10 +1,11 @@
-const CACHE_NAME = 'faero-v6';
+const CACHE_NAME = 'faero-v7';
 const STATIC_ASSETS = [
   '/',
   '/style.css',
   '/client.js',
   '/manifest.json',
-  '/faero-icon.png'
+  '/faero-icon.png',
+  '/faero-icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
