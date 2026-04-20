@@ -199,6 +199,7 @@ class DiscordBridge {
             { name: '`resources`',                     value: 'RAM / CPU / uptime report',    inline: true },
             { name: '`connect`',                       value: 'Connect to Minecraft',         inline: true },
             { name: '`disconnect`',                    value: 'Disconnect bot',               inline: true },
+            { name: '`chat <message>`',                value: 'Relay message to Minecraft',   inline: true },
             { name: '`follow`',                        value: 'Follow authorized player',     inline: true },
             { name: '`stop`',                          value: 'Stop current action',          inline: true },
             { name: '`go <x> <y> <z>`',               value: 'Navigate to coordinates',      inline: true },
@@ -285,6 +286,15 @@ class DiscordBridge {
           .setFooter({ text: 'Auto-disconnect triggers at ' + stats.limitMB + ' MB heap' })
           .setTimestamp();
         return replyEmbed(embed);
+      }
+
+      // ── Chat relay ─────────────────────────────────────────────────────
+      case 'chat': {
+        if (!bm.bot) return reply('❌ Bot is offline — cannot relay message.');
+        const text = args.join(' ').trim();
+        if (!text) return reply('❌ Usage: `!bot chat <message>`');
+        bm.bot.chat('[Discord] ' + message.author.username + ': ' + text);
+        return reply('✅ Message relayed to Minecraft.');
       }
 
       // ── Connect / Disconnect ────────────────────────────────────────────

@@ -38,6 +38,7 @@ const DISCORD_PERMISSIONS = Object.freeze({
   health:        TIERS.MOD,
   logs:          TIERS.MOD,
   // OWNER only (admin / resource management)
+  chat:          TIERS.OWNER,
   follow:        TIERS.OWNER,
   stop:          TIERS.OWNER,
   go:            TIERS.OWNER,
