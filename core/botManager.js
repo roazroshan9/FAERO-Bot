@@ -416,7 +416,9 @@ class BotManager extends EventEmitter {
     }
     if (command === 'mine_block') {
       if (!safeArgs.block) throw new Error('Missing block name');
-      return commands.handleCommand(this.getContext(), sender, 'mine ' + safeArgs.block);
+      const amount = safeArgs.amount && Number.isFinite(Number(safeArgs.amount)) && Number(safeArgs.amount) > 0
+        ? ' ' + Math.floor(Number(safeArgs.amount)) : '';
+      return commands.handleCommand(this.getContext(), sender, 'mine ' + safeArgs.block + amount);
     }
     if (command === 'pay') {
       if (!safeArgs.player || !isFiniteNumber(safeArgs.amount)) throw new Error('Missing payment target or amount');

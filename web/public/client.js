@@ -6,7 +6,9 @@ if ('serviceWorker' in navigator) {
 
 const socket = io({
   transports: ['websocket'],
-  reconnectionAttempts: 5,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 2000,
+  reconnectionDelayMax: 10000,
   timeout: 10000
 });
 
@@ -160,9 +162,13 @@ document.getElementById('go').addEventListener('click', () => {
 });
 
 document.getElementById('mineBlock').addEventListener('click', () => {
+  const amountVal = document.getElementById('mineAmount').value;
   socket.emit('command', {
     command: 'mine_block',
-    args: { block: document.getElementById('block').value.trim() }
+    args: {
+      block: document.getElementById('block').value.trim(),
+      amount: amountVal ? Number(amountVal) : undefined
+    }
   });
 });
 
@@ -193,6 +199,10 @@ els.chatForm.addEventListener('submit', (event) => {
   socket.emit('chatMessage', message);
   els.chatInput.value = '';
   els.chatInput.focus();
+});
+
+socket.on('connect', () => {
+  renderedLogCount = 0;
 });
 
 socket.on('status', renderStatus);
