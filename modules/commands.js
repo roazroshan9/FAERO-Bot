@@ -35,6 +35,14 @@ function say(bot, message) {
   bot.chat('[FAERO]: ' + message);
 }
 
+/** Tier-aware greeting used in acknowledgement messages. */
+function greet(tier) {
+  if (tier === roles.TIERS.OWNER)   return 'Boss';
+  if (tier === roles.TIERS.ADMIN)   return 'Admin';
+  if (tier === roles.TIERS.MANAGER) return 'Commander';
+  return 'User';
+}
+
 function getInventoryCount(bot) {
   try { return bot.inventory ? bot.inventory.items().length : 0; } catch { return 0; }
 }
@@ -200,17 +208,19 @@ function handleCommand(ctx, username, message, tier) {
   function commandTask(label, fn) {
     if (ctx.manager && ctx.manager.tryCommandCooldown) {
       if (!ctx.manager.tryCommandCooldown()) {
-        say(bot, 'Cooldown active — wait a moment before the next command.');
+        say(bot, 'Cooldown active — wait a moment, ' + greet(userTier) + '.');
         return false;
       }
     }
     if (ctx.manager && ctx.manager.commandInterrupt) ctx.manager.commandInterrupt();
 
+    // ── Immediate acknowledgement (fires before the task queue runs) ──────
+    say(bot, 'Command accepted, ' + greet(userTier) + '. Executing [' + label + ']…');
+
     queue.clear();
     queue.push(label, async () => {
       state.setState(STATES.COMMAND, label);
       memory.setLastAction('command: ' + label);
-      say(bot, 'Command [' + label + '] initialized.');
       try {
         await fn();
       } catch (err) {
