@@ -28,7 +28,18 @@ function createWebServer(options) {
 
   app.disable('x-powered-by');
   app.use(express.json({ limit: '16kb' }));
-  app.use(express.static(path.join(__dirname, 'public'), {
+
+  const NO_CACHE = 'no-store, no-cache, must-revalidate, proxy-revalidate';
+  const publicDir = path.join(__dirname, 'public');
+  ['/manifest.json', '/sw.js', '/faero-icon.png'].forEach((file) => {
+    app.get(file, (req, res) => {
+      res.setHeader('Cache-Control', NO_CACHE);
+      res.setHeader('Pragma', 'no-cache');
+      res.sendFile(path.join(publicDir, file));
+    });
+  });
+
+  app.use(express.static(publicDir, {
     etag: true,
     maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0
   }));
