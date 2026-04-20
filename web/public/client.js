@@ -372,11 +372,17 @@ function renderStatus(status) {
   els.position.textContent = status.position ? status.position.x + ', ' + status.position.y + ', ' + status.position.z : '-';
   els.state.textContent = status.state ? status.state.reason || status.state.state : 'idle';
   els.connectionReadout.textContent = status.running && status.username ? 'Connected as ' + status.username : 'Awaiting connection';
-  if (Array.isArray(status.logs) && status.logs.length !== renderedLogCount) {
-    els.logs.innerHTML = '';
-    renderedLogCount = status.logs.length;
-    status.logs.forEach(appendLogLineOnly);
-    els.logs.scrollTop = els.logs.scrollHeight;
+  if (Array.isArray(status.logs) && status.logs.length > 0) {
+    if (status.logs.length < renderedLogCount) {
+      els.logs.innerHTML = '';
+      renderedLogCount = 0;
+    }
+    if (status.logs.length !== renderedLogCount) {
+      const atBottom = isLogsAtBottom();
+      status.logs.slice(renderedLogCount).forEach(appendLogLineOnly);
+      renderedLogCount = status.logs.length;
+      if (atBottom) els.logs.scrollTop = els.logs.scrollHeight;
+    }
   }
   renderThought({
     decision: {
@@ -405,10 +411,15 @@ function renderThought(payload) {
   ].join('\n');
 }
 
+function isLogsAtBottom() {
+  return els.logs.scrollHeight - els.logs.scrollTop - els.logs.clientHeight <= 48;
+}
+
 function appendLog(entry) {
   renderedLogCount += 1;
+  const atBottom = isLogsAtBottom();
   appendLogLineOnly(entry);
-  els.logs.scrollTop = els.logs.scrollHeight;
+  if (atBottom) els.logs.scrollTop = els.logs.scrollHeight;
 }
 
 function classifyLog(message) {
