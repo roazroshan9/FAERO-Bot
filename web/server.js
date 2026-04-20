@@ -271,6 +271,84 @@ function mountRoutes(app, io, botManager) {
     res.json({ ok: true, results });
   });
 
+  // ── Role Management API ────────────────────────────────────────────────────
+
+  const roles = require('../config/roles');
+
+  app.get('/bot-api/roles', (req, res) => {
+    const cfg = roles.getConfig();
+    res.json({
+      ok: true,
+      ownerMcName: cfg.ownerMcName,
+      ownerDiscordId: cfg.ownerDiscordId ? '(set)' : '',
+      adminMcNames: cfg.adminMcNames,
+      adminDiscordIds: cfg.adminDiscordIds,
+      managerMcNames: cfg.managerMcNames,
+      managerDiscordIds: cfg.managerDiscordIds
+    });
+  });
+
+  app.get('/bot-api/roles/tier', (req, res) => {
+    const id = String((req.query.id) || '').trim();
+    if (!id) return res.json({ tier: 0, tierName: 'None' });
+    const mcTier = roles.getMcTier(id);
+    const discordTier = roles.getDiscordTier(id);
+    const tier = Math.max(mcTier, discordTier);
+    res.json({ tier, tierName: roles.tierName(tier) });
+  });
+
+  app.post('/bot-api/roles/add', (req, res) => {
+    try {
+      const { field, value, actorId } = req.body || {};
+      if (!field || !value) throw new Error('field and value are required');
+      const allowed = ['adminMcNames', 'adminDiscordIds', 'managerMcNames', 'managerDiscordIds'];
+      if (!allowed.includes(field)) throw new Error('Invalid role field');
+
+      const actorMcTier = roles.getMcTier(actorId || '');
+      const actorDiscordTier = roles.getDiscordTier(actorId || '');
+      const actorTier = Math.max(actorMcTier, actorDiscordTier);
+
+      const isAdminField = field.startsWith('admin');
+      if (isAdminField && actorTier < roles.TIERS.OWNER) {
+        throw new Error('Only the Owner can add Admins');
+      }
+      if (!isAdminField && actorTier < roles.TIERS.ADMIN) {
+        throw new Error('Admin or Owner role required to add Managers');
+      }
+
+      const added = roles.addToRole(field, value.trim());
+      res.json({ ok: true, added });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/roles/remove', (req, res) => {
+    try {
+      const { field, value, actorId } = req.body || {};
+      if (!field || !value) throw new Error('field and value are required');
+      const allowed = ['adminMcNames', 'adminDiscordIds', 'managerMcNames', 'managerDiscordIds'];
+      if (!allowed.includes(field)) throw new Error('Invalid role field');
+
+      const actorMcTier = roles.getMcTier(actorId || '');
+      const actorDiscordTier = roles.getDiscordTier(actorId || '');
+      const actorTier = Math.max(actorMcTier, actorDiscordTier);
+
+      const isAdminField = field.startsWith('admin');
+      if (isAdminField && actorTier < roles.TIERS.OWNER) {
+        throw new Error('Only the Owner can remove Admins');
+      }
+      if (!isAdminField && actorTier < roles.TIERS.ADMIN) {
+        throw new Error('Admin or Owner role required to remove Managers');
+      }
+
+      const removed = roles.removeFromRole(field, value.trim());
+      res.json({ ok: true, removed });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
   app.post('/bot-api/chat', (req, res) => {
     try {
       const message = String((req.body && req.body.message) || '').trim();

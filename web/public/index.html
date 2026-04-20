@@ -21,6 +21,7 @@
         <p class="eyebrow">FAERO SYSTEM</p>
         <h1>Access Gate</h1>
         <p class="subtitle">Authorization required to open the AI command center.</p>
+        <input type="text" id="identity-input" placeholder="Your MC username or Discord ID" autocomplete="off">
         <input type="password" id="pass-input" placeholder="Enter security key">
         <button id="unlockButton">LOGIN</button>
         <p id="error-msg">Access denied. Invalid key.</p>
@@ -297,8 +298,63 @@ reason: waiting</pre>
           <h2>Logs</h2>
           <div id="logs" class="logs"></div>
         </div>
+
+        <div id="rolePanel" class="card wide glass-panel role-panel" style="display:none">
+          <div class="panel-title-row">
+            <p class="eyebrow">ACCESS CONTROL</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <div class="role-header-row">
+            <h2>Role Management</h2>
+            <button id="refreshRoles" class="config-refresh-btn">Refresh</button>
+          </div>
+          <p class="chat-help">Manage who can control the bot. Changes take effect immediately without a restart.</p>
+
+          <div class="role-groups">
+            <div class="role-group">
+              <p class="role-group-label owner-label">OWNER</p>
+              <div id="roleOwnerList" class="role-list"></div>
+            </div>
+            <div class="role-group">
+              <p class="role-group-label admin-label">ADMINS</p>
+              <div id="roleAdminList" class="role-list"></div>
+            </div>
+            <div class="role-group">
+              <p class="role-group-label manager-label">MANAGERS</p>
+              <div id="roleManagerList" class="role-list"></div>
+            </div>
+          </div>
+
+          <div class="role-add-form glass-panel inner-panel">
+            <h3>Add User</h3>
+            <div class="control-row role-add-row">
+              <input id="roleAddIdentifier" placeholder="MC username or Discord ID" autocomplete="off">
+              <select id="roleAddType">
+                <option value="mc">MC Name</option>
+                <option value="discord">Discord ID</option>
+              </select>
+              <select id="roleAddRole">
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button id="roleAddBtn" class="role-add-btn">Add User</button>
+            </div>
+            <p id="roleAddMsg" class="role-add-msg"></p>
+          </div>
+        </div>
       </section>
     </main>
+
+    <div id="confirmModal" class="confirm-modal-overlay" style="display:none">
+      <div class="confirm-modal glass-panel">
+        <p class="eyebrow">CONFIRM ACTION</p>
+        <p id="confirmModalText" class="confirm-modal-text"></p>
+        <div class="confirm-modal-buttons">
+          <button id="confirmModalYes" class="danger">Confirm Remove</button>
+          <button id="confirmModalNo">Cancel</button>
+        </div>
+      </div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/client.js"></script>

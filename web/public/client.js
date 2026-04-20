@@ -51,6 +51,10 @@ let lowPowerMode = false;
 let aiModeEnabled = false;
 let _metricsLastRender = 0;
 const METRICS_THROTTLE_MS = 3000;
+let _userTier = 0;
+let _userIdentity = '';
+const TIER_ADMIN = 2;
+const TIER_OWNER = 3;
 
 const aiModeToggle = document.getElementById('aiModeToggle');
 aiModeToggle.addEventListener('click', () => {
@@ -95,6 +99,9 @@ function updateLowPowerButton(enabled) {
 els.unlockButton.addEventListener('click', unlockPanel);
 els.passInput.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') unlockPanel();
+});
+document.getElementById('identity-input').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') document.getElementById('pass-input').focus();
 });
 
 document.getElementById('start').addEventListener('click', () => {
@@ -227,16 +234,32 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-function unlockPanel() {
+async function unlockPanel() {
   if (els.passInput.value === 'FaeroFTR') {
+    _userIdentity = (document.getElementById('identity-input').value || '').trim();
     els.lockScreen.classList.add('hidden');
     els.mainContent.classList.add('unlocked');
     els.passInput.value = '';
+    document.getElementById('identity-input').value = '';
     els.errorMsg.classList.remove('visible');
     panelUnlocked = true;
     startRuntimeMetrics();
     startStatusRefresh();
     fetchConfig();
+    if (_userIdentity) {
+      try {
+        const res = await fetch('/bot-api/roles/tier?id=' + encodeURIComponent(_userIdentity), { cache: 'no-store' });
+        const data = await res.json();
+        _userTier = data.tier || 0;
+      } catch (_e) {
+        _userTier = 0;
+      }
+    }
+    const rolePanel = document.getElementById('rolePanel');
+    if (_userTier >= TIER_ADMIN && rolePanel) {
+      rolePanel.style.display = '';
+      fetchRoles();
+    }
   } else {
     els.errorMsg.classList.add('visible');
     els.passInput.value = '';
@@ -746,3 +769,168 @@ function renderDiagResults(host, port, data) {
   }
   diagLog.innerHTML = html;
 }
+
+// ── Role Management ───────────────────────────────────────────────────────────
+
+async function fetchRoles() {
+  try {
+    const res = await fetch('/bot-api/roles', { cache: 'no-store' });
+    if (!res.ok) throw new Error('roles fetch failed');
+    renderRoles(await res.json());
+  } catch (err) {
+    appendLog({ at: new Date().toISOString(), message: 'Role fetch error: ' + err.message });
+  }
+}
+
+function renderRoles(data) {
+  const ownerList  = document.getElementById('roleOwnerList');
+  const adminList  = document.getElementById('roleAdminList');
+  const managerList = document.getElementById('roleManagerList');
+  if (!ownerList) return;
+
+  ownerList.innerHTML = '';
+  adminList.innerHTML = '';
+  managerList.innerHTML = '';
+
+  if (data.ownerMcName) ownerList.appendChild(makeRoleEntry(data.ownerMcName, 'MC', null, null));
+  if (data.ownerDiscordId && data.ownerDiscordId !== '') {
+    ownerList.appendChild(makeRoleEntry('Discord owner (set)', 'Discord', null, null));
+  }
+  if (ownerList.children.length === 0) {
+    ownerList.innerHTML = '<span class="role-empty">No owner configured in env</span>';
+  }
+
+  (data.adminMcNames || []).forEach(name => {
+    if (_userTier >= TIER_OWNER) {
+      adminList.appendChild(makeRoleEntry(name, 'MC', 'adminMcNames', name));
+    } else {
+      adminList.appendChild(makeRoleEntry(name, 'MC', null, null));
+    }
+  });
+  (data.adminDiscordIds || []).forEach(id => {
+    if (_userTier >= TIER_OWNER) {
+      adminList.appendChild(makeRoleEntry(id, 'Discord', 'adminDiscordIds', id));
+    } else {
+      adminList.appendChild(makeRoleEntry(id, 'Discord', null, null));
+    }
+  });
+  if (adminList.children.length === 0) adminList.innerHTML = '<span class="role-empty">No admins configured</span>';
+
+  (data.managerMcNames || []).forEach(name => {
+    managerList.appendChild(makeRoleEntry(name, 'MC', 'managerMcNames', name));
+  });
+  (data.managerDiscordIds || []).forEach(id => {
+    managerList.appendChild(makeRoleEntry(id, 'Discord', 'managerDiscordIds', id));
+  });
+  if (managerList.children.length === 0) managerList.innerHTML = '<span class="role-empty">No managers configured</span>';
+
+  const addRoleSelect = document.getElementById('roleAddRole');
+  if (addRoleSelect) {
+    const adminOpt = addRoleSelect.querySelector('option[value="admin"]');
+    if (adminOpt) adminOpt.disabled = (_userTier < TIER_OWNER);
+  }
+}
+
+function makeRoleEntry(label, type, field, value) {
+  const row = document.createElement('div');
+  row.className = 'role-entry';
+  const info = document.createElement('span');
+  info.className = 'role-entry-name';
+  info.textContent = label;
+  const badge = document.createElement('span');
+  badge.className = 'role-type-badge ' + (type === 'Discord' ? 'badge-discord' : 'badge-mc');
+  badge.textContent = type;
+  row.appendChild(info);
+  row.appendChild(badge);
+  if (field && value) {
+    const btn = document.createElement('button');
+    btn.className = 'role-remove-btn danger';
+    btn.textContent = 'Remove';
+    btn.addEventListener('click', () => {
+      showConfirm('Remove "' + label + '" from this role?', () => removeRoleUser(field, value));
+    });
+    row.appendChild(btn);
+  }
+  return row;
+}
+
+async function removeRoleUser(field, value) {
+  try {
+    const res = await fetch('/bot-api/roles/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field, value, actorId: _userIdentity })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Remove failed');
+    appendLog({ at: new Date().toISOString(), message: 'Removed ' + value + ' from ' + field });
+    fetchRoles();
+  } catch (err) {
+    appendLog({ at: new Date().toISOString(), message: 'Role remove error: ' + err.message });
+  }
+}
+
+document.getElementById('refreshRoles').addEventListener('click', () => {
+  if (panelUnlocked && _userTier >= TIER_ADMIN) fetchRoles();
+});
+
+document.getElementById('roleAddBtn').addEventListener('click', async () => {
+  const identifier = document.getElementById('roleAddIdentifier').value.trim();
+  const type = document.getElementById('roleAddType').value;
+  const role = document.getElementById('roleAddRole').value;
+  const msg = document.getElementById('roleAddMsg');
+
+  if (!identifier) { msg.textContent = 'Enter an MC username or Discord ID.'; msg.className = 'role-add-msg error'; return; }
+
+  let field;
+  if (role === 'admin' && type === 'mc')      field = 'adminMcNames';
+  if (role === 'admin' && type === 'discord') field = 'adminDiscordIds';
+  if (role === 'manager' && type === 'mc')    field = 'managerMcNames';
+  if (role === 'manager' && type === 'discord') field = 'managerDiscordIds';
+
+  try {
+    const res = await fetch('/bot-api/roles/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field, value: identifier, actorId: _userIdentity })
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Add failed');
+    msg.textContent = data.added ? 'Added ' + identifier + ' as ' + role + '.' : identifier + ' already in that role.';
+    msg.className = 'role-add-msg success';
+    document.getElementById('roleAddIdentifier').value = '';
+    fetchRoles();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = 'role-add-msg error';
+  }
+  setTimeout(() => { msg.textContent = ''; msg.className = 'role-add-msg'; }, 4000);
+});
+
+// ── Confirmation Modal ────────────────────────────────────────────────────────
+
+let _confirmCallback = null;
+
+function showConfirm(text, onConfirm) {
+  document.getElementById('confirmModalText').textContent = text;
+  document.getElementById('confirmModal').style.display = '';
+  _confirmCallback = onConfirm;
+}
+
+document.getElementById('confirmModalYes').addEventListener('click', () => {
+  document.getElementById('confirmModal').style.display = 'none';
+  if (typeof _confirmCallback === 'function') _confirmCallback();
+  _confirmCallback = null;
+});
+
+document.getElementById('confirmModalNo').addEventListener('click', () => {
+  document.getElementById('confirmModal').style.display = 'none';
+  _confirmCallback = null;
+});
+
+document.getElementById('confirmModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('confirmModal')) {
+    document.getElementById('confirmModal').style.display = 'none';
+    _confirmCallback = null;
+  }
+});
