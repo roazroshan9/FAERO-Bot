@@ -40,6 +40,7 @@ class BotManager extends EventEmitter {
     this.lastCommandAt = 0;
     this.commandCooldownMs = readPositiveInt(process.env.COMMAND_COOLDOWN_MS, 2000);
     this.commands = new Map();
+    this._lastHealthEmit = 0;
     // ── Plugin system ─────────────────────────────────────────────────────────
     this.pluginLoader = new PluginLoader();
     const pluginsDir = path.join(__dirname, '..', 'plugins');
@@ -167,6 +168,9 @@ class BotManager extends EventEmitter {
     });
 
     bot.on('health', () => {
+      const now = Date.now();
+      if (now - this._lastHealthEmit < 1000) return;
+      this._lastHealthEmit = now;
       this.emit('bot', this.getStatus());
     });
 
@@ -319,10 +323,15 @@ class BotManager extends EventEmitter {
   }
 
   _runCleanup() {
-    if (this.logs.length > 100) this.logs.splice(0, this.logs.length - 100);
+    if (this.logs.length > 50) this.logs.splice(0, this.logs.length - 50);
     const changed = this.memory.cleanup(true);
     if (changed) this.memory.save();
-    this.log('[cleanup] memory and cache trimmed');
+    if (typeof global.gc === 'function') {
+      global.gc();
+      this.log('[cleanup] GC cycle complete');
+    } else {
+      this.log('[cleanup] memory and cache trimmed');
+    }
   }
 
   stopBrain() {
@@ -453,7 +462,7 @@ class BotManager extends EventEmitter {
       queue:   this.taskQueue.snapshot(),
       memory:  this.memory.snapshot(),
       plugins: this.pluginLoader.list(),
-      logs:    this.logs.slice(-100)
+      logs:    this.logs.slice(-25)
     };
   }
 
@@ -463,7 +472,7 @@ class BotManager extends EventEmitter {
       message
     };
     this.logs.push(entry);
-    if (this.logs.length > 300) this.logs.shift();
+    if (this.logs.length > 150) this.logs.shift();
     this.emit('log', entry);
   }
 }

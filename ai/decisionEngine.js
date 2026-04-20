@@ -34,10 +34,20 @@ function think(bot) {
 
   let nearbyMobs = throttle.cachedNearbyMobs || [];
   let hostileMob = throttle.cachedHostileMob || null;
+
+  // Evict stale entity references — entity may have despawned since last scan
+  if (hostileMob && !bot.entities[hostileMob.id]) {
+    throttle.cachedHostileMob = null;
+    hostileMob = null;
+  }
+
   if (now - (throttle.lastMobScan || 0) >= readMs('MOB_SCAN_INTERVAL_MS', DEFAULTS.mobScanIntervalMs)) {
     const scan = scanNearbyMobs(bot);
     nearbyMobs = scan.nearbyMobs;
-    hostileMob = scan.hostileMob;
+    // Store only the entity id + name, not the full object, to avoid holding GC roots
+    hostileMob = scan.hostileMob
+      ? { id: scan.hostileMob.id, name: scan.hostileMob.name, type: scan.hostileMob.type, position: scan.hostileMob.position }
+      : null;
     throttle.cachedNearbyMobs = nearbyMobs;
     throttle.cachedHostileMob = hostileMob;
     throttle.lastMobScan = now;
@@ -117,9 +127,12 @@ async function act(ctx, decision) {
 
   if (decision.type === 'danger') {
     markCooldown(ctx, 'danger');
+    const cachedTargetId = decision.target && decision.target.id;
     ctx.taskQueue.push('danger: ' + decision.reason, async () => {
       ctx.stateManager.setState(STATES.FIGHTING, decision.reason);
-      await combat.attackMob(bot, decision.target);
+      // Re-fetch live entity at execution time — avoids holding stale GC root across queue delay
+      const liveEntity = cachedTargetId ? bot.entities[cachedTargetId] : null;
+      await combat.attackMob(bot, liveEntity || decision.reason);
       ctx.memory.setLastAction('fought mob ' + decision.reason);
       if (ctx.manager) ctx.manager.log('AI combat action: ' + decision.reason);
       ctx.stateManager.reset('danger_handled');

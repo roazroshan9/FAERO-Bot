@@ -18,6 +18,7 @@ const EventEmitter = require('events');
 
 // ── Configurable thresholds ────────────────────────────────────────────────────
 const SAFE_HEAP_MB        = Number(process.env.SAFE_HEAP_MB)        || 400;
+const WARN_HEAP_MB        = Math.round(SAFE_HEAP_MB * 0.75);
 const MONITOR_INTERVAL_MS = Number(process.env.MONITOR_INTERVAL_MS) || 30000;
 
 // Action-rate window: max bot actions per time window (anti-spam / anti-cheat
@@ -31,6 +32,7 @@ class ResourceMonitor extends EventEmitter {
     this.botManager = botManager;
     this._timer          = null;
     this._alerted        = false;
+    this._warnAlerted    = false;
     this._recoveryTimer  = null;
     this._actionTimestamps = [];
 
@@ -98,6 +100,16 @@ class ResourceMonitor extends EventEmitter {
       ' | CPU: ' + cpuPct + '%' +
       ' | Uptime: ' + stats.uptimeMin + 'min'
     );
+
+    if (stats.heapMB >= WARN_HEAP_MB && !this._warnAlerted && !this._alerted) {
+      this._warnAlerted = true;
+      this.botManager.log(
+        '[monitor] WARNING: Heap at ' + stats.heapMB + 'MB (' + Math.round((stats.heapMB / SAFE_HEAP_MB) * 100) +
+        '% of limit) — running emergency cleanup.'
+      );
+      this.botManager._runCleanup();
+      setTimeout(() => { this._warnAlerted = false; }, 30000);
+    }
 
     if (stats.heapMB >= SAFE_HEAP_MB && !this._alerted) {
       this._alerted = true;
