@@ -114,6 +114,9 @@ function parseIntent(text) {
   m = text.match(/^(?:mine|dig|find|get)\s+([a-z0-9_]+)(?:\s+(\d+))?$/);
   if (m) return { cmd: 'mine_block', block: m[1], amount: m[2] ? Math.max(1, Math.min(Number(m[2]), 256)) : 64 };
 
+  m = text.match(/^give\s+([a-z0-9_]+)(?:\s+(\d+))?$/);
+  if (m) return { cmd: 'give', item: m[1], amount: m[2] ? Math.max(1, Math.min(Number(m[2]), 2304)) : 1 };
+
   return null;
 }
 
@@ -250,7 +253,7 @@ function handleCommand(ctx, username, message, tier) {
       bot.chat('[FAERO]: Role: ' + roles.tierName(userTier));
       bot.chat('[FAERO]: All roles: !help !status !follow !come !mine <block> [amount]');
       if (isAdmin || userTier === roles.TIERS.OWNER) {
-        bot.chat('[FAERO]: Admin+: !stop !protect !go !mine !attack !eat !pay !bal !addManager <n> !removeManager <n>');
+        bot.chat('[FAERO]: Admin+: !stop !protect !go !mine !attack !eat !pay !bal !give <item> [amount] !addManager <n> !removeManager <n>');
       }
       if (userTier === roles.TIERS.OWNER) {
         bot.chat('[FAERO]: Owner: !addAdmin <n> !removeAdmin <n>');
@@ -408,6 +411,43 @@ function handleCommand(ctx, username, message, tier) {
         } else {
           say(bot, 'Mining stopped. Collected ' + n + ' x ' + block + '.');
         }
+      });
+    }
+
+    // ── Give (drop items to requester) ─────────────────────────────────────
+    case 'give': {
+      const itemName        = intent.item;
+      const requestedAmount = intent.amount;
+
+      return commandTask('Give ' + itemName, async () => {
+        const registry = bot.registry;
+        const itemType = registry && (
+          registry.itemsByName[itemName] ||
+          registry.blocksByName[itemName]
+        );
+
+        if (!itemType) {
+          say(bot, 'Unknown item "' + itemName + '". Use the internal name (e.g. iron_ingot, diamond_sword).');
+          return;
+        }
+
+        const matchingStacks = bot.inventory.items().filter(i => i.type === itemType.id);
+        const totalAvailable  = matchingStacks.reduce((sum, i) => sum + i.count, 0);
+
+        if (totalAvailable === 0) {
+          say(bot, "I don't have any " + itemName + ' in my inventory.');
+          return;
+        }
+        if (totalAvailable < requestedAmount) {
+          say(bot,
+            "I don't have enough of that item. I have " + totalAvailable +
+            ' x ' + itemName + ' but you asked for ' + requestedAmount + '.'
+          );
+          return;
+        }
+
+        await bot.toss(itemType.id, null, requestedAmount);
+        say(bot, 'Dropped ' + requestedAmount + ' x ' + itemName + ' for you.');
       });
     }
 

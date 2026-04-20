@@ -1,7 +1,7 @@
 {
   "lastAction": {
-    "action": "checked balance",
-    "at": 1776674180143
+    "action": "command: Stop",
+    "at": 1776681725832
   },
   "trustedPlayers": [
     "roaz"
@@ -9,7 +9,9 @@
   "enemies": [
     "curix"
   ],
-  "attackedBy": {},
+  "attackedBy": {
+    "Suberjelly": 1776681696123
+  },
   "payments": {},
   "facts": {}
 }

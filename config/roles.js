@@ -104,6 +104,7 @@ const MC_PERMISSIONS = Object.freeze({
   jump:          TIERS.ADMIN,
   look:          TIERS.ADMIN,
   mine_area:     TIERS.ADMIN,
+  give:          TIERS.ADMIN,
   // Manager role management (ADMIN+)
   add_manager:   TIERS.ADMIN,
   remove_manager:TIERS.ADMIN,
