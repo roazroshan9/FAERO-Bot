@@ -18,14 +18,24 @@
 
 'use strict';
 
-const survival     = require('./survival');
-const combat       = require('./combat');
-const pathfinding  = require('./pathfinding');
-const economy      = require('./economy');
-const inventoryMod = require('./inventory');
-const { STATES }   = require('../core/stateManager');
-const roles        = require('../config/roles');
-const Vec3         = require('vec3').Vec3;
+const survival      = require('./survival');
+const combat        = require('./combat');
+const pathfinding   = require('./pathfinding');
+const economy       = require('./economy');
+const inventoryMod  = require('./inventory');
+const { STATES }    = require('../core/stateManager');
+const roles         = require('../config/roles');
+const Vec3          = require('vec3').Vec3;
+const { AreaScanner, SCAN_RANGE } = require('./scanner');
+
+// ─── Module-level scanner singleton (per-process; attached to ctx.manager) ────
+// Using a module singleton ensures `!mineblock` and `!mode mine` share the same
+// warmed-up cache without requiring manager construction changes.
+let _scanner = null;
+function getScanner() {
+  if (!_scanner) _scanner = new AreaScanner();
+  return _scanner;
+}
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -73,11 +83,17 @@ function clearMode(ctx) {
     clearInterval(ctx.manager._modeTimer);
     ctx.manager._modeTimer = null;
   }
+  if (ctx.manager && ctx.manager._wanderSearchTimer) {
+    clearInterval(ctx.manager._wanderSearchTimer);
+    ctx.manager._wanderSearchTimer = null;
+  }
   if (ctx.manager) ctx.manager._botMode = 'idle';
 }
 
 function setMode(ctx, mode, bot, username, state) {
   clearMode(ctx);
+  // Stop scanner when switching away from mine/wander modes
+  getScanner().stop();
   if (ctx.manager) ctx.manager._botMode = mode;
 
   switch (mode) {
@@ -114,6 +130,8 @@ function setMode(ctx, mode, bot, username, state) {
 
     case 'mine':
       state.setState(STATES.MINING, 'auto-mine');
+      // Start the area scanner so the block map is always warm
+      getScanner().start(bot);
       ctx.manager._modeTimer = setInterval(async () => {
         if (!bot || !bot.entity) return;
         try { await survival.mineIron(bot); } catch (_) {}
@@ -394,17 +412,83 @@ function parseIntent(text) {
 
 // ─── RBAC Gate (in-game) ──────────────────────────────────────────────────────
 
+const AFFIRMATIVES = new Set(['yes', 'yeah', 'yep', 'yup', 'y', 'sure', 'ok', 'okay', 'go', 'do it', 'please', 'please do', 'search']);
+const NEGATIVES    = new Set(['no', 'nope', 'n', 'nah', 'cancel', 'stop', 'dont', "don't", 'forget it', 'never mind']);
+
 function handleChat(ctx, username, message) {
   if (username === ctx.bot.username) return false;
-
-  const raw = String(message || '');
-  if (!raw.startsWith('!')) return false;
 
   const tier = roles.getMcTier(username);
   if (tier === roles.TIERS.NONE) return false;
 
+  const raw  = String(message || '');
+  const norm = raw.trim().toLowerCase();
+  const bot  = ctx.bot;
+
+  // ── Pending wander-search confirmation check ─────────────────────────────
+  // Fires when the bot previously asked "Should I start wandering to find X?"
+  const pending = ctx.manager && ctx.manager._pendingWanderSearch;
+  if (pending && pending.username === username && !raw.startsWith('!')) {
+    const expired = Date.now() > pending.expires;
+    if (expired) {
+      ctx.manager._pendingWanderSearch = null;
+    } else if (AFFIRMATIVES.has(norm)) {
+      ctx.manager._pendingWanderSearch = null;
+      _activateWanderSearch(ctx, username, pending.blockName, bot,
+        ctx.stateManager, ctx.taskQueue);
+      return true;
+    } else if (NEGATIVES.has(norm)) {
+      ctx.manager._pendingWanderSearch = null;
+      say(bot, 'Understood. Staying put. Use !mineblock ' + pending.blockName + ' when ready.');
+      return true;
+    }
+    // Not a yes/no → fall through to normal command handling
+  }
+
+  if (!raw.startsWith('!')) return false;
+
   const body = raw.slice(1).trim();
   return handleCommand(ctx, username, body, tier);
+}
+
+/** Switches to wander mode and keeps scanning, handing off to mining once found. */
+function _activateWanderSearch(ctx, username, blockName, bot, state, queue) {
+  const scanner = getScanner();
+  say(bot, 'Starting wander-search for ' + blockName + '. I\'ll let you know when found!');
+  setMode(ctx, 'wander', bot, username, state);
+  // Also re-start scanner (setMode stopped it)
+  scanner.start(bot);
+
+  // Poll the scanner every 10 s while wandering
+  const searchTimer = setInterval(async () => {
+    const modeNow = ctx.manager && ctx.manager._botMode;
+    if (modeNow !== 'wander') { clearInterval(searchTimer); return; }
+    if (!bot || !bot.entity)  { clearInterval(searchTimer); return; }
+
+    // Run a fresh immediate scan to capture new chunks
+    await scanner.scanNow(bot).catch(() => {});
+
+    if (scanner.hasBlock(blockName)) {
+      clearInterval(searchTimer);
+      const hit = scanner.getClosest(bot, blockName);
+      say(bot, 'Found ' + blockName + ' while wandering!'
+        + (hit ? ' At ' + round1(hit.x) + ' ' + round1(hit.y) + ' ' + round1(hit.z) + ' (' + hit.dist + ' blocks).' : '')
+        + ' Switching to mining now.');
+      setMode(ctx, 'mine', bot, username, state);
+      queue.clear();
+      queue.push('Mine ' + blockName, async () => {
+        state.setState(STATES.MINING, blockName);
+        const result = await survival.mineBlockByName(bot, blockName, 64, (count) => {
+          say(bot, 'Progress: ' + count + '/64 ' + blockName + ' mined.');
+        });
+        say(bot, 'Done — collected ' + result.mined + ' x ' + blockName + '.');
+        state.reset('wander-search mine complete');
+      }, { priority: 100 });
+    }
+  }, 10000);
+
+  // Store timer so it can be cancelled on mode-switch
+  if (ctx.manager) ctx.manager._wanderSearchTimer = searchTimer;
 }
 
 // ─── Command Dispatcher ───────────────────────────────────────────────────────
@@ -603,17 +687,22 @@ function handleCommand(ctx, username, message, tier) {
     case 'wander':
       return commandTask('Wander', async () => {
         state.setState(STATES.WANDERING, 'random patrol');
+        // Keep scanner running while wandering — useful for wander-search
+        const scanner = getScanner();
+        if (!scanner.isActive()) scanner.start(bot);
         const origin = bot.entity.position.clone();
-        say(bot, 'Wandering for 3 waypoints around current position.');
+        say(bot, 'Wandering for 3 waypoints around current position. Scanner active.');
         for (let i = 0; i < 3; i++) {
           const wx = origin.x + (Math.random() - 0.5) * 40;
           const wz = origin.z + (Math.random() - 0.5) * 40;
           try {
             await pathfinding.goToCoords(bot, wx, origin.y, wz, 2);
           } catch (_) {}
-          await new Promise(r => setTimeout(r, 800));
+          // Quick scan at each waypoint so map stays fresh
+          await scanner.scanNow(bot).catch(() => {});
+          await new Promise(r => setTimeout(r, 400));
         }
-        say(bot, 'Wander complete.');
+        say(bot, 'Wander complete. Scan map has ' + scanner.getSummary() + '.');
       });
 
     // ════════════════════════════════════════════════════════════════════════
@@ -832,21 +921,64 @@ function handleCommand(ctx, username, message, tier) {
         say(bot, 'Unknown block "' + block + '". Check the name and try again.');
         return false;
       }
+
       return commandTask('Mine ' + block, async () => {
         state.setState(STATES.MINING, block);
-        say(bot, 'Mining up to ' + amount + ' x ' + block + '…');
+
+        // ── Full Area Scan ────────────────────────────────────────────────
+        // Start the scanner (idempotent) and run an immediate scan so the
+        // block map is fresh before we decide whether to proceed or wander.
+        const scanner = getScanner();
+        if (!scanner.isActive()) scanner.start(bot);
+
+        say(bot, 'Running full area scan (' + SCAN_RANGE + ' block radius)…');
+        await scanner.scanNow(bot);
+
+        if (!scanner.hasBlock(block)) {
+          // Block not found — ask the user if they want wander-search
+          const found = scanner.getSummary();
+          say(bot,
+            "I've scanned the area and I can't find [" + block + ']. '
+            + 'Scan found: ' + (found || 'nothing valuable nearby') + '.'
+          );
+          say(bot, 'Should I start wandering to search for it? Reply YES or NO.');
+          if (ctx.manager) {
+            ctx.manager._pendingWanderSearch = {
+              username,
+              blockName: block,
+              expires:   Date.now() + 60000   // 60 s window to reply
+            };
+          }
+          return; // exit this task — wander will be triggered by yes/no
+        }
+
+        // Block is in the scan map — report position and mine
+        const hit = scanner.getClosest(bot, block);
+        if (hit) {
+          say(bot,
+            'Scan found ' + hit.blockName + ' at '
+            + round1(hit.x) + ' ' + round1(hit.y) + ' ' + round1(hit.z)
+            + ' (' + hit.dist + ' blocks). Proceeding to mine.'
+          );
+        } else {
+          say(bot, 'Block detected in scan map. Mining up to ' + amount + ' x ' + block + '…');
+        }
+
         const result = await survival.mineBlockByName(bot, block, amount, (count) => {
           say(bot, 'Progress: ' + count + ' / ' + amount + ' ' + block + ' mined.');
         });
+
         const n = result.mined;
         if (result.reason === 'target_reached') {
           say(bot, 'Done: ' + n + ' x ' + block + ' collected.');
         } else if (result.reason === 'inventory_full') {
           say(bot, 'Inventory full — stopped at ' + n + ' x ' + block + '.');
         } else if (result.reason === 'none_found') {
+          // Re-check scanner — it might have been cleared between scan and dig
           say(bot, n > 0
-            ? 'No more ' + block + ' nearby. Collected ' + n + ' x ' + block + '.'
-            : 'Could not find any ' + block + ' within 32 blocks.');
+            ? 'No more ' + block + ' in range. Collected ' + n + ' x ' + block + '.'
+            : "Scan showed " + block + " but couldn't reach it. Try !mineblock again."
+          );
         } else {
           say(bot, 'Mining stopped. Collected ' + n + ' x ' + block + '.');
         }
