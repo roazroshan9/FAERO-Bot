@@ -3,7 +3,8 @@ const STATIC_ASSETS = [
   '/',
   '/style.css',
   '/client.js',
-  '/manifest.json'
+  '/manifest.json',
+  '/faero-icon.png'
 ];
 
 self.addEventListener('install', (event) => {

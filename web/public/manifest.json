@@ -1,13 +1,18 @@
 {
-  "name": "FAERO",
+  "name": "FAERO BOT System",
   "short_name": "FAERO",
   "description": "AI Minecraft Bot Control Panel",
   "start_url": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "icons": [
+    {
+      "src": "/faero-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
