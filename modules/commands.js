@@ -83,8 +83,8 @@ function parseIntent(text) {
   m = text.match(/^(?:mine|dig)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)(?:\s+radius\s+(\d+))?$/);
   if (m) return { cmd: 'mine_area', x: Number(m[1]), y: Number(m[2]), z: Number(m[3]), radius: Number(m[4] || 5) };
 
-  m = text.match(/^(?:mine|dig|find|get)\s+([a-z0-9_]+)$/);
-  if (m) return { cmd: 'mine_block', block: m[1] };
+  m = text.match(/^(?:mine|dig|find|get)\s+([a-z0-9_]+)(?:\s+(\d+))?$/);
+  if (m) return { cmd: 'mine_block', block: m[1], amount: m[2] ? Math.max(1, Math.min(Number(m[2]), 256)) : 64 };
 
   return null;
 }
@@ -213,8 +213,8 @@ function handleCommand(ctx, username, message, tier) {
     case 'help': {
       const isMod = userTier === roles.TIERS.MOD;
       bot.chat('[FAERO]: Your role: ' + roles.tierName(userTier));
-      bot.chat('[FAERO]: Available: !help !status' + (isMod ? ' !follow !come' : ' !follow !come !stop !protect !go !mine !attack !eat !food'));
-      if (!isMod) bot.chat('[FAERO]: Owner-only: !stop !protect !go !mine !attack !eat !pay !bal');
+      bot.chat('[FAERO]: Available: !help !status' + (isMod ? ' !follow !come' : ' !follow !come !stop !protect !go !mine <block> [amount] !attack !eat !food'));
+      if (!isMod) bot.chat('[FAERO]: Owner-only: !stop !protect !go !mine <block> [1-256] !attack !eat !pay !bal');
       return true;
     }
 
@@ -344,16 +344,30 @@ function handleCommand(ctx, username, message, tier) {
     }
 
     case 'mine_block': {
-      const block = intent.block;
+      const block  = intent.block;
+      const amount = intent.amount;
       if (!bot.registry || !bot.registry.blocksByName[block]) {
         say(bot, 'Error — Unknown block "' + block + '". Check the name and try again.');
         return false;
       }
       return commandTask('Mine ' + block, async () => {
         state.setState(STATES.MINING, block);
-        say(bot, 'Searching for ' + block + ' within range.');
-        await survival.mineBlockByName(bot, block, 64);
-        say(bot, 'Mining session for ' + block + ' complete.');
+        say(bot, 'Mining up to ' + amount + ' x ' + block + '. Searching within 32 blocks…');
+        const result = await survival.mineBlockByName(bot, block, amount, (count) => {
+          say(bot, 'Progress: ' + count + ' / ' + amount + ' ' + block + ' mined.');
+        });
+        const n = result.mined;
+        if (result.reason === 'target_reached') {
+          say(bot, 'Mining task complete: ' + n + ' x ' + block + ' collected.');
+        } else if (result.reason === 'inventory_full') {
+          say(bot, 'Inventory full — stopped at ' + n + ' x ' + block + ' collected.');
+        } else if (result.reason === 'none_found') {
+          say(bot, n > 0
+            ? 'No more ' + block + ' nearby. Collected ' + n + ' x ' + block + '.'
+            : 'Could not find any ' + block + ' within 32 blocks.');
+        } else {
+          say(bot, 'Mining stopped. Collected ' + n + ' x ' + block + '.');
+        }
       });
     }
 

@@ -146,6 +146,11 @@ async function minePriorityOre(bot) {
   return true;
 }
 
+function isInventoryFull(bot) {
+  if (!bot.inventory) return false;
+  return bot.inventory.items().length >= 35;
+}
+
 async function mineBlockObject(bot, block) {
   if (!block) return false;
   pathfinding.setupMovements(bot);
@@ -158,18 +163,29 @@ async function mineBlockObject(bot, block) {
   return false;
 }
 
-async function mineBlockByName(bot, blockName, maxCount) {
+/**
+ * Mine up to `maxCount` of `blockName` near the bot.
+ * Returns { mined: number, reason: 'target_reached'|'inventory_full'|'none_found'|'cannot_dig' }
+ * Calls onProgress(count) every 16 blocks so the caller can broadcast progress chat.
+ */
+async function mineBlockByName(bot, blockName, maxCount, onProgress) {
+  const limit = Math.max(1, Math.min(Number(maxCount) || 64, 256));
   let mined = 0;
-  const limit = Math.min(Number(maxCount) || 16, 16);
+
   while (mined < limit) {
-    const block = pathfinding.nearestBlock(bot, [blockName], 24);
-    if (!block) break;
+    if (isInventoryFull(bot)) return { mined, reason: 'inventory_full' };
+    const block = pathfinding.nearestBlock(bot, [blockName], 32);
+    if (!block) return { mined, reason: 'none_found' };
     const ok = await mineBlockObject(bot, block);
-    if (!ok) break;
+    if (!ok) return { mined, reason: 'cannot_dig' };
     mined++;
-    await wait(100);
+    if (typeof onProgress === 'function' && mined % 16 === 0 && mined < limit) {
+      onProgress(mined);
+    }
+    await wait(150);
   }
-  return mined;
+
+  return { mined, reason: 'target_reached' };
 }
 
 async function mineIron(bot) {
@@ -179,26 +195,28 @@ async function mineIron(bot) {
 async function cutWood(bot) {
   let count = 0;
   for (const name of ['oak_log', 'spruce_log', 'birch_log', 'jungle_log', 'acacia_log', 'dark_oak_log', 'mangrove_log', 'cherry_log']) {
-    count += await mineBlockByName(bot, name, 16);
-    if (count >= 16) break;
+    const result = await mineBlockByName(bot, name, 16);
+    count += result.mined;
+    if (count >= 16 || result.reason === 'inventory_full') break;
   }
   return count;
 }
 
 async function mineAnyByNames(bot, names, maxCount) {
   let mined = 0;
-  const limit = Math.min(Number(maxCount) || 16, 16);
+  const limit = Math.max(1, Math.min(Number(maxCount) || 16, 256));
   while (mined < limit) {
+    if (isInventoryFull(bot)) break;
     let block = null;
     for (const name of names) {
-      block = pathfinding.nearestBlock(bot, [name], 24);
+      block = pathfinding.nearestBlock(bot, [name], 32);
       if (block) break;
     }
     if (!block) break;
     const ok = await mineBlockObject(bot, block);
     if (!ok) break;
     mined++;
-    await wait(100);
+    await wait(150);
   }
   return mined;
 }
@@ -255,6 +273,7 @@ module.exports = {
   collectNearbyResources,
   findPriorityOre,
   minePriorityOre,
+  isInventoryFull,
   mineBlockObject,
   mineBlockByName,
   mineAnyByNames,
