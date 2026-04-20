@@ -1,13 +1,18 @@
 const EventEmitter = require('events');
 
 const STATES = {
-  IDLE: 'idle',
-  MINING: 'mining',
-  FIGHTING: 'fighting',
-  ESCAPING: 'escaping',
+  IDLE:      'idle',
+  MINING:    'mining',
+  FIGHTING:  'fighting',
+  ESCAPING:  'escaping',
   FOLLOWING: 'following',
-  PAYING: 'paying',
-  COMMAND: 'command'
+  PAYING:    'paying',
+  COMMAND:   'command',
+  WANDERING: 'wandering',
+  FARMING:   'farming',
+  BUILDING:  'building',
+  GUARDING:  'guarding',
+  STORING:   'storing'
 };
 
 class StateManager extends EventEmitter {

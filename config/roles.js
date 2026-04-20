@@ -84,34 +84,58 @@ const DISCORD_PERMISSIONS = Object.freeze({
 
 const MC_PERMISSIONS = Object.freeze({
   // ── MANAGER + ADMIN + OWNER ──────────────────────────────────────────────
-  help:          TIERS.MANAGER,
-  status:        TIERS.MANAGER,
-  follow:        TIERS.MANAGER,
-  come:          TIERS.MANAGER,
-  mine_block:    TIERS.MANAGER,
-  mine_iron:     TIERS.MANAGER,
-  wood:          TIERS.MANAGER,
-  eat:           TIERS.MANAGER,
-  food:          TIERS.MANAGER,
+  help:           TIERS.MANAGER,
+  status:         TIERS.MANAGER,
+  follow:         TIERS.MANAGER,
+  come:           TIERS.MANAGER,
+  mineblock:      TIERS.MANAGER,  // renamed from mine_block
+  mine_iron:      TIERS.MANAGER,
+  wood:           TIERS.MANAGER,
+  eat:            TIERS.MANAGER,
+  food:           TIERS.MANAGER,
+  // AI Modes
+  mode:           TIERS.MANAGER,
+  // Inventory
+  inv:            TIERS.MANAGER,
+  equip:          TIERS.MANAGER,
+  // Combat & Movement
+  pvp_toggle:     TIERS.MANAGER,
+  target_mob:     TIERS.MANAGER,
+  retreat:        TIERS.MANAGER,
+  sethome:        TIERS.MANAGER,
+  home:           TIERS.MANAGER,
+  tp:             TIERS.MANAGER,
+  wander:         TIERS.MANAGER,
+  // Debug & Dev
+  tasklist:       TIERS.MANAGER,
+  debug:          TIERS.MANAGER,
 
   // ── ADMIN + OWNER ────────────────────────────────────────────────────────
-  stop:          TIERS.ADMIN,
-  protect:       TIERS.ADMIN,
-  goto:          TIERS.ADMIN,
-  attack:        TIERS.ADMIN,
-  pay:           TIERS.ADMIN,
-  balance:       TIERS.ADMIN,
-  jump:          TIERS.ADMIN,
-  look:          TIERS.ADMIN,
-  mine_area:     TIERS.ADMIN,
-  give:          TIERS.ADMIN,
+  stop:           TIERS.ADMIN,
+  protect:        TIERS.ADMIN,
+  goto:           TIERS.ADMIN,
+  attack:         TIERS.ADMIN,
+  pay:            TIERS.ADMIN,
+  balance:        TIERS.ADMIN,
+  jump:           TIERS.ADMIN,
+  look:           TIERS.ADMIN,
+  minearea:       TIERS.ADMIN,  // renamed from mine_area
+  give:           TIERS.ADMIN,
+  // Inventory (Admin+)
+  dropall:        TIERS.ADMIN,
+  store:          TIERS.ADMIN,
+  // Building
+  build:          TIERS.ADMIN,
+  // Debug (Admin+)
+  cleartasks:     TIERS.ADMIN,
+  log_view:       TIERS.ADMIN,
   // Manager role management (ADMIN+)
-  add_manager:   TIERS.ADMIN,
-  remove_manager:TIERS.ADMIN,
+  add_manager:    TIERS.ADMIN,
+  remove_manager: TIERS.ADMIN,
 
   // ── OWNER only ───────────────────────────────────────────────────────────
-  add_admin:     TIERS.OWNER,
-  remove_admin:  TIERS.OWNER
+  add_admin:      TIERS.OWNER,
+  remove_admin:   TIERS.OWNER
 });
 
 // ─── File Overrides ───────────────────────────────────────────────────────────

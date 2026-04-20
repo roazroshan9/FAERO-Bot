@@ -1,5 +1,5 @@
 /**
- * FAERO — In-Game Command Handler
+ * FAERO — In-Game Command Handler (v2)
  *
  * Entry point: handleChat(ctx, username, message)
  *   - Only responds to messages starting with !
@@ -8,22 +8,24 @@
  *   - All actions are rate-limited via commandCooldownMs
  *
  * TIER HIERARCHY
- *   MANAGER (1) — mine, move, follow, come, help, status
- *   ADMIN   (2) — everything Manager has + stop, protect, goto, attack, pay, balance
- *                 + can add/remove Managers (!addManager / !removeManager)
- *   OWNER   (3) — unrestricted + can add/remove Admins (!addAdmin / !removeAdmin)
- *
- * Personal, non-commercial use only. See README.md.
+ *   MANAGER (1) — modes, inv, equip, pvp, target, retreat, sethome, home,
+ *                 tp, wander, tasklist, debug, mineblock, follow, come, eat, food
+ *   ADMIN   (2) — everything Manager has + stop, protect, goto, attack, pay,
+ *                 balance, give, dropall, store, build, cleartasks, log, minearea
+ *                 + can add/remove Managers
+ *   OWNER   (3) — unrestricted + can add/remove Admins
  */
 
 'use strict';
 
-const survival    = require('./survival');
-const combat      = require('./combat');
-const pathfinding = require('./pathfinding');
-const economy     = require('./economy');
-const { STATES }  = require('../core/stateManager');
-const roles       = require('../config/roles');
+const survival     = require('./survival');
+const combat       = require('./combat');
+const pathfinding  = require('./pathfinding');
+const economy      = require('./economy');
+const inventoryMod = require('./inventory');
+const { STATES }   = require('../core/stateManager');
+const roles        = require('../config/roles');
+const Vec3         = require('vec3').Vec3;
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -35,7 +37,6 @@ function say(bot, message) {
   bot.chat('[FAERO]: ' + message);
 }
 
-/** Tier-aware greeting used in acknowledgement messages. */
 function greet(tier) {
   if (tier === roles.TIERS.OWNER)   return 'Boss';
   if (tier === roles.TIERS.ADMIN)   return 'Admin';
@@ -63,61 +64,62 @@ function getTarget(bot, username) {
   return player.entity;
 }
 
-// ─── NLP Intent Parser ────────────────────────────────────────────────────────
+// ─── AI Mode System ───────────────────────────────────────────────────────────
 
-function parseIntent(text) {
-  if (/^(help|commands|what can you do|options|list commands?)$/.test(text)) return { cmd: 'help' };
-  if (/^(status|stats|info|where are you|how are you|report|position|pos|location|health)$/.test(text)) return { cmd: 'status' };
-  if (/^(follow(?: me)?|track me|stay close|trail me|accompany me)$/.test(text)) return { cmd: 'follow' };
-  if (/^(come(?: here| to me| over)?|get to me|approach|come closer)$/.test(text)) return { cmd: 'come' };
-  if (/^(stop|halt|freeze|cancel|abort|stand down|pause|idle|at ease)$/.test(text)) return { cmd: 'stop' };
-  if (/^(protect(?: me)?|guardian(?: mode)?|guard(?: me)?|watch over me|defend(?: me)?)$/.test(text)) return { cmd: 'protect' };
-  if (/^(jump|hop)$/.test(text)) return { cmd: 'jump' };
-  if (/^(look around|look|survey|scan)$/.test(text)) return { cmd: 'look' };
-  if (/^(eat(?: food)?|consume|feed yourself|eat something)$/.test(text)) return { cmd: 'eat' };
-  if (/^(collect food|get food|food|gather food|forage|get something to eat)$/.test(text)) return { cmd: 'food' };
-  if (/^(mine iron|dig iron|iron ore|get iron)$/.test(text)) return { cmd: 'mine_iron' };
-  if (/^(cut wood|chop(?: wood)?|wood|lumber|get wood|tree)$/.test(text)) return { cmd: 'wood' };
-  if (/^(bal|balance|money|wallet|cash|funds|how much)$/.test(text)) return { cmd: 'balance' };
+const VALID_MODES = ['idle', 'survival', 'guard', 'farm', 'mine'];
 
-  let m;
-
-  // ── Role management ──────────────────────────────────────────────────────
-  m = text.match(/^(?:add[\s_-]?admin)\s+([a-z0-9_]+)$/);
-  if (m) return { cmd: 'add_admin', target: m[1] };
-
-  m = text.match(/^(?:remove[\s_-]?admin|revoke[\s_-]?admin)\s+([a-z0-9_]+)$/);
-  if (m) return { cmd: 'remove_admin', target: m[1] };
-
-  m = text.match(/^(?:add[\s_-]?manager)\s+([a-z0-9_]+)$/);
-  if (m) return { cmd: 'add_manager', target: m[1] };
-
-  m = text.match(/^(?:remove[\s_-]?manager|revoke[\s_-]?manager)\s+([a-z0-9_]+)$/);
-  if (m) return { cmd: 'remove_manager', target: m[1] };
-
-  // ── Combat / movement / economy ──────────────────────────────────────────
-  m = text.match(/^(?:attack|kill|fight|destroy|eliminate|target)\s+([a-z0-9_]+)$/);
-  if (m) return { cmd: 'attack', target: m[1] };
-
-  m = text.match(/^pay\s+([a-z0-9_]+)\s+(\d+)$/);
-  if (m) return { cmd: 'pay', player: m[1], amount: Number(m[2]) };
-
-  const coordsRe   = /(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/;
-  const coordsMatch = text.match(coordsRe);
-  if (coordsMatch && /^(?:go|goto|navigate|move|head|tp|teleport|path|route)/.test(text)) {
-    return { cmd: 'goto', x: Number(coordsMatch[1]), y: Number(coordsMatch[2]), z: Number(coordsMatch[3]) };
+function clearMode(ctx) {
+  if (ctx.manager && ctx.manager._modeTimer) {
+    clearInterval(ctx.manager._modeTimer);
+    ctx.manager._modeTimer = null;
   }
+  if (ctx.manager) ctx.manager._botMode = 'idle';
+}
 
-  m = text.match(/^(?:mine|dig)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)(?:\s+radius\s+(\d+))?$/);
-  if (m) return { cmd: 'mine_area', x: Number(m[1]), y: Number(m[2]), z: Number(m[3]), radius: Number(m[4] || 5) };
+function setMode(ctx, mode, bot, username, state) {
+  clearMode(ctx);
+  if (ctx.manager) ctx.manager._botMode = mode;
 
-  m = text.match(/^(?:mine|dig|find|get)\s+([a-z0-9_]+)(?:\s+(\d+))?$/);
-  if (m) return { cmd: 'mine_block', block: m[1], amount: m[2] ? Math.max(1, Math.min(Number(m[2]), 256)) : 64 };
+  switch (mode) {
+    case 'idle':
+      pathfinding.stop(bot);
+      state.reset('mode: idle');
+      break;
 
-  m = text.match(/^give\s+([a-z0-9_]+)(?:\s+(\d+))?$/);
-  if (m) return { cmd: 'give', item: m[1], amount: m[2] ? Math.max(1, Math.min(Number(m[2]), 2304)) : 1 };
+    case 'survival':
+      ctx.manager._modeTimer = setInterval(async () => {
+        if (!bot || !bot.entity) return;
+        if ((bot.food || 0) < 14) {
+          try {
+            state.setState(STATES.COMMAND, 'auto-eat');
+            await survival.eatFood(bot);
+          } catch (_) {}
+          finally { state.reset('survival mode'); }
+        }
+      }, 12000);
+      break;
 
-  return null;
+    case 'guard':
+      state.setState(STATES.GUARDING, username);
+      startGuardianMode(ctx, username, bot);
+      break;
+
+    case 'farm':
+      state.setState(STATES.FARMING, 'auto-farm');
+      ctx.manager._modeTimer = setInterval(async () => {
+        if (!bot || !bot.entity) return;
+        try { await survival.collectFood(bot); } catch (_) {}
+      }, 35000);
+      break;
+
+    case 'mine':
+      state.setState(STATES.MINING, 'auto-mine');
+      ctx.manager._modeTimer = setInterval(async () => {
+        if (!bot || !bot.entity) return;
+        try { await survival.mineIron(bot); } catch (_) {}
+      }, 65000);
+      break;
+  }
 }
 
 // ─── Guardian Mode ────────────────────────────────────────────────────────────
@@ -157,12 +159,241 @@ function stopGuardianMode(ctx) {
   }
 }
 
+// ─── Building Helpers ─────────────────────────────────────────────────────────
+
+const BUILD_MATERIALS = [
+  'cobblestone', 'stone', 'stone_bricks', 'oak_planks',
+  'spruce_planks', 'birch_planks', 'sandstone', 'dirt'
+];
+
+function getBuildMaterial(bot, minCount) {
+  for (const mat of BUILD_MATERIALS) {
+    const type = bot.registry && bot.registry.itemsByName[mat];
+    if (!type) continue;
+    const stack = bot.inventory.items().find(i => i.type === type.id && i.count >= minCount);
+    if (stack) return { item: stack, name: mat, id: type.id };
+  }
+  return null;
+}
+
+async function placeBlockAt(bot, x, y, z, buildItem) {
+  const refBlock = bot.blockAt(new Vec3(x, y - 1, z));
+  if (!refBlock || refBlock.name === 'air') return false;
+  try {
+    await bot.equip(buildItem, 'hand');
+    await bot.lookAt(new Vec3(x + 0.5, y - 0.5, z + 0.5));
+    await bot.placeBlock(refBlock, new Vec3(0, 1, 0));
+    await new Promise(r => setTimeout(r, 120));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function buildWall(bot, state) {
+  const needed = 10;
+  const mat = getBuildMaterial(bot, needed);
+  if (!mat) throw new Error('Need at least ' + needed + ' blocks of: ' + BUILD_MATERIALS.slice(0, 4).join(', '));
+
+  state.setState(STATES.BUILDING, 'wall');
+  const pos  = bot.entity.position.floored();
+  const yaw  = bot.entity.yaw;
+  // Perpendicular direction to the bot's facing = wall direction
+  const wx = Math.round(Math.cos(yaw));
+  const wz = Math.round(Math.sin(yaw));
+  const fwdX = Math.round(-Math.sin(yaw));
+  const fwdZ = Math.round(Math.cos(yaw));
+
+  let placed = 0;
+  for (let i = -2; i <= 2; i++) {
+    for (let h = 0; h <= 1; h++) {
+      const x = pos.x + wx * i + fwdX;
+      const y = pos.y + h;
+      const z = pos.z + wz * i + fwdZ;
+      if (await placeBlockAt(bot, x, y, z, mat.item)) placed++;
+    }
+  }
+  return { placed, mat: mat.name, type: 'wall' };
+}
+
+async function buildBridge(bot, state) {
+  const needed = 8;
+  const mat = getBuildMaterial(bot, needed);
+  if (!mat) throw new Error('Need at least ' + needed + ' blocks of: ' + BUILD_MATERIALS.slice(0, 4).join(', '));
+
+  state.setState(STATES.BUILDING, 'bridge');
+  const pos  = bot.entity.position.floored();
+  const yaw  = bot.entity.yaw;
+  const fwdX = Math.round(-Math.sin(yaw));
+  const fwdZ = Math.round(Math.cos(yaw));
+
+  let placed = 0;
+  for (let i = 1; i <= 8; i++) {
+    const x = pos.x + fwdX * i;
+    const y = pos.y - 1;
+    const z = pos.z + fwdZ * i;
+    const refBlock = bot.blockAt(new Vec3(x, y - 1, z));
+    if (refBlock && refBlock.name !== 'air') {
+      if (await placeBlockAt(bot, x, y, z, mat.item)) placed++;
+    } else {
+      // Place on the side of the last placed block
+      try {
+        const sideRef = bot.blockAt(new Vec3(x - fwdX, y, z - fwdZ));
+        if (sideRef && sideRef.name !== 'air') {
+          await bot.equip(mat.item, 'hand');
+          await bot.placeBlock(sideRef, new Vec3(fwdX, 0, fwdZ));
+          placed++;
+          await new Promise(r => setTimeout(r, 120));
+        }
+      } catch (_) {}
+    }
+  }
+  return { placed, mat: mat.name, type: 'bridge' };
+}
+
+async function buildHouse(bot, state) {
+  const needed = 32;
+  const mat = getBuildMaterial(bot, needed);
+  if (!mat) throw new Error('Need at least ' + needed + ' blocks of: ' + BUILD_MATERIALS.slice(0, 4).join(', '));
+
+  state.setState(STATES.BUILDING, 'house');
+  const pos  = bot.entity.position.floored();
+  const size = 3;
+  let placed = 0;
+
+  // Foundation ring (perimeter of size x size)
+  for (let x = -size; x <= size; x++) {
+    for (let z = -size; z <= size; z++) {
+      if (Math.abs(x) === size || Math.abs(z) === size) {
+        for (let h = 0; h <= 2; h++) {
+          if (await placeBlockAt(bot, pos.x + x, pos.y + h, pos.z + z, mat.item)) placed++;
+        }
+      }
+    }
+  }
+  return { placed, mat: mat.name, type: 'house' };
+}
+
+// ─── NLP Intent Parser ────────────────────────────────────────────────────────
+
+function parseIntent(text) {
+  // ── Simple keyword commands ───────────────────────────────────────────────
+  if (/^(help|commands|what can you do|options|list commands?)$/.test(text)) return { cmd: 'help' };
+  if (/^(status|stats|info|where are you|how are you|report|position|pos|location|health)$/.test(text)) return { cmd: 'status' };
+  if (/^(follow(?: me)?|track me|stay close|trail me|accompany me)$/.test(text)) return { cmd: 'follow' };
+  if (/^(come(?: here| to me| over)?|get to me|approach|come closer)$/.test(text)) return { cmd: 'come' };
+  if (/^(stop|halt|freeze|cancel|abort|stand down|pause|idle|at ease)$/.test(text)) return { cmd: 'stop' };
+  if (/^(protect(?: me)?|guardian(?: mode)?|guard(?: me)?|watch over me|defend(?: me)?)$/.test(text)) return { cmd: 'protect' };
+  if (/^(jump|hop)$/.test(text)) return { cmd: 'jump' };
+  if (/^(look around|look|survey|scan)$/.test(text)) return { cmd: 'look' };
+  if (/^(eat(?: food)?|consume|feed yourself|eat something)$/.test(text)) return { cmd: 'eat' };
+  if (/^(collect food|get food|food|gather food|forage|get something to eat)$/.test(text)) return { cmd: 'food' };
+  if (/^(mine iron|dig iron|iron ore|get iron)$/.test(text)) return { cmd: 'mine_iron' };
+  if (/^(cut wood|chop(?: wood)?|wood|lumber|get wood|tree)$/.test(text)) return { cmd: 'wood' };
+  if (/^(bal|balance|money|wallet|cash|funds|how much)$/.test(text)) return { cmd: 'balance' };
+  if (/^(inv|inventory|items|what do you have|bag|backpack)$/.test(text)) return { cmd: 'inv' };
+  if (/^(dropall|drop all|empty inventory|dump inventory|clear inventory)$/.test(text)) return { cmd: 'dropall' };
+  if (/^(store|store items|deposit|chest store|put away)$/.test(text)) return { cmd: 'store' };
+  if (/^(retreat|flee|run away|escape|fall back|get away)$/.test(text)) return { cmd: 'retreat' };
+  if (/^(sethome|set home|save home|mark home|home point)$/.test(text)) return { cmd: 'sethome' };
+  if (/^(home|go home|return home|back to base|base)$/.test(text)) return { cmd: 'home' };
+  if (/^(wander|roam|explore|drift|walk around|patrol)$/.test(text)) return { cmd: 'wander' };
+  if (/^(tasklist|tasks|queue|task queue|what are you doing|current tasks)$/.test(text)) return { cmd: 'tasklist' };
+  if (/^(cleartasks|clear tasks|cancel all|abort all|flush tasks)$/.test(text)) return { cmd: 'cleartasks' };
+
+  let m;
+
+  // ── AI Mode ───────────────────────────────────────────────────────────────
+  m = text.match(/^mode\s+(idle|survival|guard|farm|mine)$/);
+  if (m) return { cmd: 'mode', mode: m[1] };
+
+  // ── PvP toggle ────────────────────────────────────────────────────────────
+  m = text.match(/^pvp\s+(on|off|enable|disable|true|false|yes|no)$/);
+  if (m) return { cmd: 'pvp_toggle', enabled: /^(on|enable|true|yes)$/.test(m[1]) };
+
+  // ── Debug toggle ──────────────────────────────────────────────────────────
+  m = text.match(/^debug\s+(on|off|enable|disable|true|false)$/);
+  if (m) return { cmd: 'debug', enabled: /^(on|enable|true)$/.test(m[1]) };
+
+  // ── Target mob ────────────────────────────────────────────────────────────
+  m = text.match(/^(?:target|hunt|kill mob|fight)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'target_mob', mob: m[1] };
+
+  // ── Equip item ────────────────────────────────────────────────────────────
+  m = text.match(/^(?:equip|hold|wield|use)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'equip', item: m[1] };
+
+  // ── TP to player ──────────────────────────────────────────────────────────
+  m = text.match(/^(?:tp|teleport|goto player|go to)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'tp', target: m[1] };
+
+  // ── Log view ──────────────────────────────────────────────────────────────
+  m = text.match(/^(?:log|logs|show logs?|recent logs?)(?:\s+(\d+))?$/);
+  if (m) return { cmd: 'log_view', count: m[1] ? Math.min(Number(m[1]), 10) : 5 };
+
+  // ── Build ─────────────────────────────────────────────────────────────────
+  m = text.match(/^build\s+(house|wall|bridge)$/);
+  if (m) return { cmd: 'build', structure: m[1] };
+
+  // ── Give ──────────────────────────────────────────────────────────────────
+  m = text.match(/^give\s+([a-z0-9_]+)(?:\s+(\d+))?$/);
+  if (m) return { cmd: 'give', item: m[1], amount: m[2] ? Math.max(1, Math.min(Number(m[2]), 2304)) : 1 };
+
+  // ── Role management ───────────────────────────────────────────────────────
+  m = text.match(/^(?:add[\s_-]?admin)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'add_admin', target: m[1] };
+
+  m = text.match(/^(?:remove[\s_-]?admin|revoke[\s_-]?admin)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'remove_admin', target: m[1] };
+
+  m = text.match(/^(?:add[\s_-]?manager)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'add_manager', target: m[1] };
+
+  m = text.match(/^(?:remove[\s_-]?manager|revoke[\s_-]?manager)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'remove_manager', target: m[1] };
+
+  // ── Combat / movement / economy ───────────────────────────────────────────
+  m = text.match(/^(?:attack|kill|fight|destroy|eliminate|target)\s+([a-z0-9_]+)$/);
+  if (m) return { cmd: 'attack', target: m[1] };
+
+  m = text.match(/^pay\s+([a-z0-9_]+)\s+(\d+)$/);
+  if (m) return { cmd: 'pay', player: m[1], amount: Number(m[2]) };
+
+  const coordsRe    = /(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/;
+  const coordsMatch = text.match(coordsRe);
+  if (coordsMatch && /^(?:go|goto|navigate|move|head|tp|teleport|path|route)/.test(text)) {
+    return { cmd: 'goto', x: Number(coordsMatch[1]), y: Number(coordsMatch[2]), z: Number(coordsMatch[3]) };
+  }
+
+  // ── Renamed: minearea (was mine_area) — 6-coord bounding box ─────────────
+  m = text.match(/^minearea\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)$/);
+  if (m) {
+    const cx = (Number(m[1]) + Number(m[4])) / 2;
+    const cy = (Number(m[2]) + Number(m[5])) / 2;
+    const cz = (Number(m[3]) + Number(m[6])) / 2;
+    const radius = Math.max(
+      Math.abs(Number(m[4]) - Number(m[1])),
+      Math.abs(Number(m[6]) - Number(m[3]))
+    ) / 2;
+    return { cmd: 'minearea', x: cx, y: cy, z: cz, radius: Math.max(1, Math.ceil(radius)) };
+  }
+  // Legacy center+radius form
+  m = text.match(/^minearea\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)(?:\s+radius\s+(\d+))?$/);
+  if (m) return { cmd: 'minearea', x: Number(m[1]), y: Number(m[2]), z: Number(m[3]), radius: Number(m[4] || 5) };
+
+  // ── Renamed: mineblock (was mine <block>) ─────────────────────────────────
+  m = text.match(/^mineblock\s+([a-z0-9_]+)(?:\s+(\d+))?$/);
+  if (m) return { cmd: 'mineblock', block: m[1], amount: m[2] ? Math.max(1, Math.min(Number(m[2]), 256)) : 64 };
+
+  // ── Legacy: old !mine shorthand still works (falls through to mineblock) ──
+  m = text.match(/^(?:mine|dig|find|get)\s+([a-z0-9_]+)(?:\s+(\d+))?$/);
+  if (m) return { cmd: 'mineblock', block: m[1], amount: m[2] ? Math.max(1, Math.min(Number(m[2]), 256)) : 64 };
+
+  return null;
+}
+
 // ─── RBAC Gate (in-game) ──────────────────────────────────────────────────────
 
-/**
- * handleChat — called from botManager on every in-game chat event.
- * Silently ignores non-! messages and unauthorized players.
- */
 function handleChat(ctx, username, message) {
   if (username === ctx.bot.username) return false;
 
@@ -170,8 +401,6 @@ function handleChat(ctx, username, message) {
   if (!raw.startsWith('!')) return false;
 
   const tier = roles.getMcTier(username);
-
-  // Silently ignore completely unknown users — no info disclosure to potential attackers
   if (tier === roles.TIERS.NONE) return false;
 
   const body = raw.slice(1).trim();
@@ -187,12 +416,9 @@ function handleCommand(ctx, username, message, tier) {
   const bot = ctx.bot;
   if (!bot || !bot.entity) return false;
 
-  const queue      = ctx.taskQueue;
-  const state      = ctx.stateManager;
-  const memory     = ctx.memory;
-  const pvpEnabled = ctx.pvpEnabled;
-
-  // Current tier (if called from web/Discord bridge, tier may be undefined)
+  const queue  = ctx.taskQueue;
+  const state  = ctx.stateManager;
+  const memory = ctx.memory;
   const userTier = tier !== undefined ? tier : roles.getMcTier(username);
 
   // ── Permission check helper ──────────────────────────────────────────────
@@ -201,8 +427,8 @@ function handleCommand(ctx, username, message, tier) {
     const required = roles.MC_PERMISSIONS[cmd] !== undefined
       ? roles.MC_PERMISSIONS[cmd] : roles.TIERS.OWNER;
     say(bot,
-      'Permission denied — [' + cmd + '] requires **' + roles.tierName(required) + '** access.' +
-      ' Your role: ' + roles.tierName(userTier)
+      'Permission denied — [' + cmd + '] requires ' + roles.tierName(required) +
+      ' access. Your role: ' + roles.tierName(userTier)
     );
     return false;
   }
@@ -216,8 +442,6 @@ function handleCommand(ctx, username, message, tier) {
       }
     }
     if (ctx.manager && ctx.manager.commandInterrupt) ctx.manager.commandInterrupt();
-
-    // ── Immediate acknowledgement (fires before the task queue runs) ──────
     say(bot, 'Command accepted, ' + greet(userTier) + '. Executing [' + label + ']…');
 
     queue.clear();
@@ -241,44 +465,72 @@ function handleCommand(ctx, username, message, tier) {
     return false;
   }
 
-  // ── Per-intent RBAC check ────────────────────────────────────────────────
   if (!permitCmd(intent.cmd)) return false;
 
   switch (intent.cmd) {
 
-    // ── Help ───────────────────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════════════════
+    // HELP & STATUS
+    // ════════════════════════════════════════════════════════════════════════
+
     case 'help': {
-      const isManager = userTier === roles.TIERS.MANAGER;
-      const isAdmin   = userTier === roles.TIERS.ADMIN;
-      bot.chat('[FAERO]: Role: ' + roles.tierName(userTier));
-      bot.chat('[FAERO]: All roles: !help !status !follow !come !mine <block> [amount]');
-      if (isAdmin || userTier === roles.TIERS.OWNER) {
-        bot.chat('[FAERO]: Admin+: !stop !protect !go !mine !attack !eat !pay !bal !give <item> [amount] !addManager <n> !removeManager <n>');
+      const isAdmin = userTier >= roles.TIERS.ADMIN;
+      const isOwner = userTier === roles.TIERS.OWNER;
+      const mode = (ctx.manager && ctx.manager._botMode) || 'idle';
+      bot.chat('[FAERO]: Role: ' + roles.tierName(userTier) + ' | Mode: ' + mode);
+      bot.chat('[FAERO]: Movement: !follow !come !tp <player> !wander !sethome !home');
+      bot.chat('[FAERO]: Mining:   !mineblock <block> [n] | !mine_iron | !wood');
+      bot.chat('[FAERO]: Survival: !eat | !food | !inv | !equip <item> | !retreat');
+      bot.chat('[FAERO]: AI Modes: !mode idle|survival|guard|farm|mine');
+      bot.chat('[FAERO]: Combat:   !pvp on|off | !target <mob> | !protect');
+      bot.chat('[FAERO]: Debug:    !tasklist | !debug on|off | !status');
+      if (isAdmin) {
+        bot.chat('[FAERO]: Admin+:  !stop !goto !attack !pay !bal !give <item> [n]');
+        bot.chat('[FAERO]: Admin+:  !dropall | !store | !minearea <x1 y1 z1 x2 y2 z2>');
+        bot.chat('[FAERO]: Admin+:  !build wall|bridge|house | !cleartasks | !log [n]');
+        bot.chat('[FAERO]: Admin+:  !addManager <n> | !removeManager <n>');
       }
-      if (userTier === roles.TIERS.OWNER) {
-        bot.chat('[FAERO]: Owner: !addAdmin <n> !removeAdmin <n>');
+      if (isOwner) {
+        bot.chat('[FAERO]: Owner:   !addAdmin <n> | !removeAdmin <n>');
       }
       return true;
     }
 
-    // ── Status ─────────────────────────────────────────────────────────────
     case 'status': {
-      const pos = bot.entity.position;
-      const x = round1(pos.x), y = round1(pos.y), z = round1(pos.z);
-      const hp     = Math.round((bot.health || 0) * 10) / 10;
-      const hunger = Math.round(bot.food || 0);
-      const items  = getInventoryCount(bot);
-      const guardianOn  = ctx.manager && ctx.manager._guardianActive;
-      const stateLabel  = guardianOn ? 'GUARDIAN' : (state.getState ? state.getState().state : 'idle');
+      const pos  = bot.entity.position;
+      const hp   = Math.round((bot.health || 0) * 10) / 10;
+      const food = Math.round(bot.food || 0);
+      const mode = (ctx.manager && ctx.manager._botMode) || 'idle';
+      const snap = queue.snapshot();
       say(bot,
-        'Online | Pos: ' + x + ' ' + y + ' ' + z +
-        ' | HP: ' + hp + '/20 | Hunger: ' + hunger + '/20' +
-        ' | Items: ' + items + ' | Mode: ' + stateLabel
+        'HP: ' + hp + '/20 | Food: ' + food + '/20 | Mode: ' + mode +
+        ' | Pos: ' + round1(pos.x) + ' ' + round1(pos.y) + ' ' + round1(pos.z) +
+        ' | Items: ' + getInventoryCount(bot) + ' | Task: ' + (snap.currentTask || 'none')
       );
       return true;
     }
 
-    // ── Movement ───────────────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════════════════
+    // AI MODES
+    // ════════════════════════════════════════════════════════════════════════
+
+    case 'mode': {
+      const targetMode = intent.mode;
+      if (!VALID_MODES.includes(targetMode)) {
+        say(bot, 'Invalid mode. Choose: ' + VALID_MODES.join(', '));
+        return false;
+      }
+      if (ctx.manager && ctx.manager.tryCommandCooldown) ctx.manager.tryCommandCooldown();
+      if (targetMode !== 'guard') stopGuardianMode(ctx);
+      setMode(ctx, targetMode, bot, username, state);
+      say(bot, 'Mode switched to [' + targetMode.toUpperCase() + '], ' + greet(userTier) + '.');
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // MOVEMENT
+    // ════════════════════════════════════════════════════════════════════════
+
     case 'follow':
       return commandTask('Follow', async () => {
         const target = getTarget(bot, username);
@@ -298,6 +550,7 @@ function handleCommand(ctx, username, message, tier) {
       });
 
     case 'stop':
+      clearMode(ctx);
       stopGuardianMode(ctx);
       return commandTask('Stop', async () => {
         pathfinding.stop(bot);
@@ -308,43 +561,230 @@ function handleCommand(ctx, username, message, tier) {
     case 'goto':
       return commandTask('Goto', async () => {
         const { x, y, z } = intent;
-        say(bot, 'Navigating to ' + x + ' ' + y + ' ' + z + ' — plotting safe route.');
+        say(bot, 'Navigating to ' + x + ' ' + y + ' ' + z + '.');
         await pathfinding.goToCoords(bot, x, y, z, 1);
-        say(bot, 'Destination reached: ' + x + ' ' + y + ' ' + z);
+        say(bot, 'Arrived at ' + x + ' ' + y + ' ' + z + '.');
       });
 
-    // ── Guardian Mode ──────────────────────────────────────────────────────
+    case 'tp': {
+      const tpTarget = intent.target;
+      return commandTask('TP to ' + tpTarget, async () => {
+        const player = bot.players[tpTarget];
+        if (!player || !player.entity) {
+          say(bot, 'Cannot locate ' + tpTarget + ' — are they in range?');
+          return;
+        }
+        const tPos = player.entity.position;
+        say(bot, 'Heading to ' + tpTarget + ' at ' + round1(tPos.x) + ' ' + round1(tPos.y) + ' ' + round1(tPos.z) + '.');
+        await pathfinding.goToCoords(bot, tPos.x, tPos.y, tPos.z, 2);
+        say(bot, 'Reached ' + tpTarget + '.');
+      });
+    }
+
+    case 'sethome': {
+      const pos = bot.entity.position;
+      if (ctx.manager) ctx.manager._homePosition = { x: pos.x, y: pos.y, z: pos.z };
+      say(bot, 'Home set at ' + round1(pos.x) + ' ' + round1(pos.y) + ' ' + round1(pos.z) + '.');
+      return true;
+    }
+
+    case 'home':
+      return commandTask('Go Home', async () => {
+        const home = ctx.manager && ctx.manager._homePosition;
+        if (!home) {
+          say(bot, 'No home set — use !sethome first.');
+          return;
+        }
+        say(bot, 'Heading home: ' + round1(home.x) + ' ' + round1(home.y) + ' ' + round1(home.z) + '.');
+        await pathfinding.goToCoords(bot, home.x, home.y, home.z, 1);
+        say(bot, 'Arrived home.');
+      });
+
+    case 'wander':
+      return commandTask('Wander', async () => {
+        state.setState(STATES.WANDERING, 'random patrol');
+        const origin = bot.entity.position.clone();
+        say(bot, 'Wandering for 3 waypoints around current position.');
+        for (let i = 0; i < 3; i++) {
+          const wx = origin.x + (Math.random() - 0.5) * 40;
+          const wz = origin.z + (Math.random() - 0.5) * 40;
+          try {
+            await pathfinding.goToCoords(bot, wx, origin.y, wz, 2);
+          } catch (_) {}
+          await new Promise(r => setTimeout(r, 800));
+        }
+        say(bot, 'Wander complete.');
+      });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // GUARDIAN / COMBAT
+    // ════════════════════════════════════════════════════════════════════════
+
     case 'protect':
       return commandTask('Guardian', async () => {
         startGuardianMode(ctx, username, bot);
-        say(bot, 'Guardian Mode ACTIVE — scanning 10-block radius around you for hostiles.');
+        state.setState(STATES.GUARDING, username);
+        say(bot, 'Guardian Mode ACTIVE — scanning 10-block radius around you.');
       });
 
-    // ── Jump / Look ────────────────────────────────────────────────────────
-    case 'jump':
-      return commandTask('Jump', async () => {
-        bot.setControlState('jump', true);
-        await new Promise((r) => setTimeout(r, 400));
-        bot.setControlState('jump', false);
-      });
-
-    case 'look':
-      return commandTask('Survey', async () => {
-        bot.look(Math.random() * Math.PI * 2, 0, true);
-        say(bot, 'Scanning surroundings.');
-      });
-
-    // ── Combat ─────────────────────────────────────────────────────────────
     case 'attack': {
       const tgt = intent.target;
       return commandTask('Attack', async () => {
         state.setState(STATES.FIGHTING, tgt);
         memory.addEnemy(tgt);
-        await combat.attackPlayer(bot, memory, tgt, pvpEnabled);
+        await combat.attackPlayer(bot, memory, tgt, ctx.manager ? ctx.manager.pvpEnabled : true);
       });
     }
 
-    // ── Survival ───────────────────────────────────────────────────────────
+    case 'pvp_toggle': {
+      const newVal = intent.enabled;
+      if (ctx.manager) ctx.manager.pvpEnabled = newVal;
+      say(bot, 'PvP mode ' + (newVal ? 'ENABLED — hostile players now targetable.' : 'DISABLED — player attacks suppressed.'));
+      return true;
+    }
+
+    case 'target_mob': {
+      const mobName = intent.mob;
+      return commandTask('Target ' + mobName, async () => {
+        const mob = bot.nearestEntity(e =>
+          e.name &&
+          e.name.toLowerCase().includes(mobName.toLowerCase()) &&
+          e.type === 'mob' &&
+          bot.entity.position.distanceTo(e.position) <= 32
+        );
+        if (!mob) {
+          say(bot, 'No ' + mobName + ' found within 32 blocks.');
+          return;
+        }
+        state.setState(STATES.FIGHTING, mob.name);
+        const dist = Math.round(bot.entity.position.distanceTo(mob.position));
+        say(bot, 'Targeting ' + mob.name + ' at ' + dist + ' blocks.');
+        await combat.attackMob(bot, mob);
+        say(bot, 'Combat with ' + mob.name + ' concluded.');
+      });
+    }
+
+    case 'retreat':
+      return commandTask('Retreat', async () => {
+        state.setState(STATES.ESCAPING, 'retreat');
+        const hostile = bot.nearestEntity(e => combat.isHostileMob(e));
+        if (!hostile) {
+          say(bot, 'No immediate threat detected — standing by.');
+          state.reset('no threat');
+          return;
+        }
+        const myPos     = bot.entity.position;
+        const threatPos = hostile.position;
+        const dx = myPos.x - threatPos.x;
+        const dz = myPos.z - threatPos.z;
+        const len = Math.sqrt(dx * dx + dz * dz) || 1;
+        const rx  = myPos.x + (dx / len) * 20;
+        const rz  = myPos.z + (dz / len) * 20;
+        say(bot, 'Retreating from ' + hostile.name + ' — moving 20 blocks away!');
+        await pathfinding.goToCoords(bot, rx, myPos.y, rz, 2);
+        say(bot, 'Retreat complete. Distance from threat: ' + Math.round(bot.entity.position.distanceTo(threatPos)) + ' blocks.');
+      });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // INVENTORY
+    // ════════════════════════════════════════════════════════════════════════
+
+    case 'inv': {
+      const items = bot.inventory.items();
+      if (items.length === 0) {
+        say(bot, 'Inventory is empty.');
+        return true;
+      }
+      const counts = {};
+      items.forEach(item => { counts[item.displayName] = (counts[item.displayName] || 0) + item.count; });
+      const total = items.reduce((s, i) => s + i.count, 0);
+      const lines = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([name, count]) => count + 'x ' + name)
+        .join(', ');
+      say(bot, 'Inventory (' + total + ' items, ' + items.length + ' types): ' + lines);
+      return true;
+    }
+
+    case 'equip': {
+      return commandTask('Equip ' + intent.item, async () => {
+        const registry = bot.registry;
+        const itemType = registry && (registry.itemsByName[intent.item] || registry.blocksByName[intent.item]);
+        if (!itemType) {
+          say(bot, 'Unknown item "' + intent.item + '". Use the internal name (e.g. diamond_sword).');
+          return;
+        }
+        const stack = bot.inventory.items().find(i => i.type === itemType.id);
+        if (!stack) {
+          say(bot, "I don't have " + intent.item + ' in my inventory.');
+          return;
+        }
+        await bot.equip(stack, 'hand');
+        say(bot, 'Equipped ' + stack.displayName + ' to main hand.');
+      });
+    }
+
+    case 'dropall':
+      return commandTask('Drop All', async () => {
+        const items = bot.inventory.items();
+        if (items.length === 0) { say(bot, 'Inventory already empty.'); return; }
+        let dropped = 0;
+        for (const item of items) {
+          try { await bot.tossStack(item); dropped++; } catch (_) {}
+        }
+        say(bot, 'Dropped ' + dropped + ' stack(s) — inventory cleared.');
+      });
+
+    case 'store':
+      return commandTask('Store Items', async () => {
+        state.setState(STATES.STORING, 'chest');
+        const chestBlock = bot.registry && bot.registry.blocksByName['chest'];
+        if (!chestBlock) { say(bot, 'Cannot locate chest block in registry.'); return; }
+        const chest = bot.findBlock({ matching: chestBlock.id, maxDistance: 16 });
+        if (!chest) { say(bot, 'No chest found within 16 blocks.'); return; }
+        say(bot, 'Moving to chest at ' + chest.position.x + ' ' + chest.position.y + ' ' + chest.position.z + '.');
+        await pathfinding.goToCoords(bot, chest.position.x, chest.position.y, chest.position.z, 2);
+        const chestWindow = await bot.openChest(chest);
+        const invItems = bot.inventory.items();
+        let stored = 0;
+        for (const item of invItems) {
+          try {
+            await chestWindow.deposit(item.type, null, item.count);
+            stored += item.count;
+          } catch (_) {}
+        }
+        chestWindow.close();
+        say(bot, 'Stored ' + stored + ' items in chest.');
+      });
+
+    case 'give': {
+      return commandTask('Give ' + intent.item, async () => {
+        const registry = bot.registry;
+        const itemType = registry && (registry.itemsByName[intent.item] || registry.blocksByName[intent.item]);
+        if (!itemType) {
+          say(bot, 'Unknown item "' + intent.item + '". Use the internal name (e.g. iron_ingot).');
+          return;
+        }
+        const matchingStacks = bot.inventory.items().filter(i => i.type === itemType.id);
+        const totalAvailable  = matchingStacks.reduce((sum, i) => sum + i.count, 0);
+        if (totalAvailable === 0) {
+          say(bot, "I don't have any " + intent.item + ' in my inventory.');
+          return;
+        }
+        if (totalAvailable < intent.amount) {
+          say(bot, "I don't have enough of that item. Have " + totalAvailable + ' x ' + intent.item + ', need ' + intent.amount + '.');
+          return;
+        }
+        await bot.toss(itemType.id, null, intent.amount);
+        say(bot, 'Dropped ' + intent.amount + ' x ' + intent.item + ' for you.');
+      });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // SURVIVAL / MINING
+    // ════════════════════════════════════════════════════════════════════════
+
     case 'food':
       return commandTask('Collect Food', async () => {
         say(bot, 'Scanning for nearby food sources.');
@@ -359,7 +799,6 @@ function handleCommand(ctx, username, message, tier) {
         say(bot, 'Consumed food. HP: ' + Math.round(bot.health || 0));
       });
 
-    // ── Mining ─────────────────────────────────────────────────────────────
     case 'mine_iron':
       return commandTask('Mine Iron', async () => {
         state.setState(STATES.MINING, 'iron');
@@ -376,34 +815,34 @@ function handleCommand(ctx, username, message, tier) {
         say(bot, 'Wood collection complete.');
       });
 
-    case 'mine_area': {
+    case 'minearea': {
       const { x, y, z, radius } = intent;
       return commandTask('Area Mine', async () => {
         state.setState(STATES.MINING, 'area');
-        say(bot, 'Area mining at ' + x + ' ' + y + ' ' + z + ' radius ' + radius);
+        say(bot, 'Area mining at ' + round1(x) + ' ' + round1(y) + ' ' + round1(z) + ' radius ' + radius + '.');
         await survival.mineArea(bot, x, y, z, radius);
         say(bot, 'Area mine complete.');
       });
     }
 
-    case 'mine_block': {
+    case 'mineblock': {
       const block  = intent.block;
       const amount = intent.amount;
       if (!bot.registry || !bot.registry.blocksByName[block]) {
-        say(bot, 'Error — Unknown block "' + block + '". Check the name and try again.');
+        say(bot, 'Unknown block "' + block + '". Check the name and try again.');
         return false;
       }
       return commandTask('Mine ' + block, async () => {
         state.setState(STATES.MINING, block);
-        say(bot, 'Mining up to ' + amount + ' x ' + block + '. Searching within 32 blocks…');
+        say(bot, 'Mining up to ' + amount + ' x ' + block + '…');
         const result = await survival.mineBlockByName(bot, block, amount, (count) => {
           say(bot, 'Progress: ' + count + ' / ' + amount + ' ' + block + ' mined.');
         });
         const n = result.mined;
         if (result.reason === 'target_reached') {
-          say(bot, 'Mining task complete: ' + n + ' x ' + block + ' collected.');
+          say(bot, 'Done: ' + n + ' x ' + block + ' collected.');
         } else if (result.reason === 'inventory_full') {
-          say(bot, 'Inventory full — stopped at ' + n + ' x ' + block + ' collected.');
+          say(bot, 'Inventory full — stopped at ' + n + ' x ' + block + '.');
         } else if (result.reason === 'none_found') {
           say(bot, n > 0
             ? 'No more ' + block + ' nearby. Collected ' + n + ' x ' + block + '.'
@@ -414,44 +853,23 @@ function handleCommand(ctx, username, message, tier) {
       });
     }
 
-    // ── Give (drop items to requester) ─────────────────────────────────────
-    case 'give': {
-      const itemName        = intent.item;
-      const requestedAmount = intent.amount;
+    // ════════════════════════════════════════════════════════════════════════
+    // MISC / UTILITY
+    // ════════════════════════════════════════════════════════════════════════
 
-      return commandTask('Give ' + itemName, async () => {
-        const registry = bot.registry;
-        const itemType = registry && (
-          registry.itemsByName[itemName] ||
-          registry.blocksByName[itemName]
-        );
-
-        if (!itemType) {
-          say(bot, 'Unknown item "' + itemName + '". Use the internal name (e.g. iron_ingot, diamond_sword).');
-          return;
-        }
-
-        const matchingStacks = bot.inventory.items().filter(i => i.type === itemType.id);
-        const totalAvailable  = matchingStacks.reduce((sum, i) => sum + i.count, 0);
-
-        if (totalAvailable === 0) {
-          say(bot, "I don't have any " + itemName + ' in my inventory.');
-          return;
-        }
-        if (totalAvailable < requestedAmount) {
-          say(bot,
-            "I don't have enough of that item. I have " + totalAvailable +
-            ' x ' + itemName + ' but you asked for ' + requestedAmount + '.'
-          );
-          return;
-        }
-
-        await bot.toss(itemType.id, null, requestedAmount);
-        say(bot, 'Dropped ' + requestedAmount + ' x ' + itemName + ' for you.');
+    case 'jump':
+      return commandTask('Jump', async () => {
+        bot.setControlState('jump', true);
+        await new Promise(r => setTimeout(r, 400));
+        bot.setControlState('jump', false);
       });
-    }
 
-    // ── Economy ────────────────────────────────────────────────────────────
+    case 'look':
+      return commandTask('Survey', async () => {
+        bot.look(Math.random() * Math.PI * 2, 0, true);
+        say(bot, 'Scanning surroundings.');
+      });
+
     case 'pay':
       return commandTask('Pay', async () => {
         state.setState(STATES.PAYING, intent.player);
@@ -464,82 +882,120 @@ function handleCommand(ctx, username, message, tier) {
         economy.requestBalance(bot);
       });
 
-    // ── Role Management ────────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════════════════
+    // BUILDING
+    // ════════════════════════════════════════════════════════════════════════
+
+    case 'build':
+      return commandTask('Build ' + intent.structure, async () => {
+        let result;
+        switch (intent.structure) {
+          case 'wall':   result = await buildWall(bot, state);   break;
+          case 'bridge': result = await buildBridge(bot, state); break;
+          case 'house':  result = await buildHouse(bot, state);  break;
+          default: say(bot, 'Unknown structure. Choose: wall, bridge, house.'); return;
+        }
+        say(bot,
+          'Build complete — placed ' + result.placed + ' ' + result.mat +
+          ' blocks (' + result.type + ').'
+        );
+      });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // DEBUG / DEV TOOLS
+    // ════════════════════════════════════════════════════════════════════════
+
+    case 'debug': {
+      if (ctx.manager) ctx.manager._debugMode = intent.enabled;
+      say(bot, 'Debug mode ' + (intent.enabled ? 'ON — verbose logging active.' : 'OFF.'));
+      return true;
+    }
+
+    case 'tasklist': {
+      const snap = queue.snapshot();
+      if (!snap.currentTask && snap.pending.length === 0) {
+        const mode = (ctx.manager && ctx.manager._botMode) || 'idle';
+        say(bot, 'Task queue empty. State: ' + state.getState().state + ' | Mode: ' + mode);
+      } else {
+        const pending = snap.pending.length > 0 ? ' | Queued: ' + snap.pending.slice(0, 5).join(', ') : '';
+        say(bot, 'Current: ' + (snap.currentTask || 'none') + pending);
+      }
+      return true;
+    }
+
+    case 'cleartasks': {
+      clearMode(ctx);
+      stopGuardianMode(ctx);
+      queue.clear();
+      pathfinding.stop(bot);
+      state.reset('tasks cleared');
+      say(bot, 'Task queue cleared and mode reset. Bot is idle.');
+      return true;
+    }
+
+    case 'log_view': {
+      const logStatus = ctx.manager && ctx.manager.getStatus ? ctx.manager.getStatus() : {};
+      const logEntries = Array.isArray(logStatus.logs) ? logStatus.logs : [];
+      const recent = logEntries.slice(-(intent.count || 5));
+      if (recent.length === 0) {
+        say(bot, 'No recent log entries available.');
+      } else {
+        recent.forEach(entry => {
+          const msg = entry.message || String(entry);
+          say(bot, msg.slice(0, 100));
+        });
+      }
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ROLE MANAGEMENT
+    // ════════════════════════════════════════════════════════════════════════
 
     case 'add_admin': {
-      // OWNER-only (enforced by permitCmd)
       const targetName = intent.target;
       const cfg = roles.getConfig();
-      if (targetName === cfg.ownerMcName) {
-        say(bot, 'Cannot modify the Owner.');
-        return false;
-      }
+      if (targetName === cfg.ownerMcName) { say(bot, 'Cannot modify the Owner.'); return false; }
       const targetTier = roles.getMcTier(targetName);
-      if (targetTier === roles.TIERS.ADMIN) {
-        say(bot, targetName + ' is already an Admin.');
-        return false;
-      }
+      if (targetTier === roles.TIERS.ADMIN) { say(bot, targetName + ' is already an Admin.'); return false; }
       roles.addToRole('adminMcNames', targetName);
-      // Remove from Manager if they were one (promotion)
       roles.removeFromRole('managerMcNames', targetName);
-      say(bot, 'Granted Admin role to ' + targetName + '. Full functional access enabled.');
+      say(bot, 'Granted Admin role to ' + targetName + '. Full access enabled.');
       return true;
     }
 
     case 'remove_admin': {
-      // OWNER-only (enforced by permitCmd)
       const targetName = intent.target;
       const cfg = roles.getConfig();
-      if (targetName === cfg.ownerMcName) {
-        say(bot, 'Cannot modify the Owner.');
-        return false;
-      }
+      if (targetName === cfg.ownerMcName) { say(bot, 'Cannot modify the Owner.'); return false; }
       const removed = roles.removeFromRole('adminMcNames', targetName);
-      if (!removed) {
-        say(bot, targetName + ' is not an Admin.');
-        return false;
-      }
-      say(bot, 'Revoked Admin role from ' + targetName + '. Access removed.');
+      if (!removed) { say(bot, targetName + ' is not an Admin.'); return false; }
+      say(bot, 'Revoked Admin role from ' + targetName + '.');
       return true;
     }
 
     case 'add_manager': {
-      // ADMIN+ (enforced by permitCmd)
-      // Hierarchy check: cannot modify anyone at own tier or above
       const targetName = intent.target;
       const targetTier = roles.getMcTier(targetName);
       if (!roles.canModifyTier(userTier, targetTier)) {
-        say(bot,
-          'Hierarchy violation — ' + targetName + ' has ' + roles.tierName(targetTier) +
-          ' access (>= your ' + roles.tierName(userTier) + ' tier). Cannot modify.'
-        );
+        say(bot, 'Hierarchy violation — ' + targetName + ' is ' + roles.tierName(targetTier) + ' (>= your tier).');
         return false;
       }
       const added = roles.addToRole('managerMcNames', targetName);
-      if (!added) {
-        say(bot, targetName + ' is already a Manager.');
-        return false;
-      }
-      say(bot, 'Granted Manager role to ' + targetName + '. Operational access enabled.');
+      if (!added) { say(bot, targetName + ' is already a Manager.'); return false; }
+      say(bot, 'Granted Manager role to ' + targetName + '.');
       return true;
     }
 
     case 'remove_manager': {
-      // ADMIN+ (enforced by permitCmd)
       const targetName = intent.target;
       const targetTier = roles.getMcTier(targetName);
       if (!roles.canModifyTier(userTier, targetTier)) {
-        say(bot,
-          'Hierarchy violation — ' + targetName + ' has ' + roles.tierName(targetTier) +
-          ' access (>= your ' + roles.tierName(userTier) + ' tier). Cannot modify.'
-        );
+        say(bot, 'Hierarchy violation — ' + targetName + ' is ' + roles.tierName(targetTier) + ' (>= your tier).');
         return false;
       }
       const removed = roles.removeFromRole('managerMcNames', targetName);
-      if (!removed) {
-        say(bot, targetName + ' is not a Manager.');
-        return false;
-      }
+      if (!removed) { say(bot, targetName + ' is not a Manager.'); return false; }
       say(bot, 'Revoked Manager role from ' + targetName + '.');
       return true;
     }
@@ -555,19 +1011,21 @@ function handleCommand(ctx, username, message, tier) {
 function classifyError(err) {
   const msg = (err && err.message) ? err.message.toLowerCase() : '';
   if (msg.includes('no path') || msg.includes('cannot find') || msg.includes('pathfind'))
-    return 'Path blocked — cannot find a safe route to that location.';
+    return 'Path blocked — cannot find a safe route.';
   if (msg.includes('lava') || msg.includes('fire'))
-    return 'Route blocked by lava or fire. Move to a safer area first.';
+    return 'Route blocked by lava or fire.';
   if (msg.includes('inventory') || msg.includes('full'))
-    return 'Inventory full — drop some items and try again.';
+    return 'Inventory full — drop some items and retry.';
   if (msg.includes('too far') || msg.includes('distance'))
-    return 'Target is too far away. Close the gap and retry.';
+    return 'Target is too far away.';
   if (msg.includes('not found') || msg.includes('no block') || msg.includes('no target'))
-    return 'Target not found nearby. Try a different location or block type.';
+    return 'Target not found nearby.';
   if (msg.includes('safety blocked') || msg.includes('pvp'))
     return 'Action blocked — PvP is disabled or target is not an enemy.';
   if (msg.includes('timeout'))
-    return 'Action timed out — the task took too long and was aborted.';
+    return 'Action timed out and was aborted.';
+  if (msg.includes('materials') || msg.includes('blocks of'))
+    return err.message;
   return (err && err.message) ? err.message : 'Unexpected error.';
 }
 

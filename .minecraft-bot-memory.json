@@ -1,17 +1,16 @@
 {
   "lastAction": {
-    "action": "command: Stop",
-    "at": 1776681725832
+    "action": "command: Collect Food",
+    "at": 1776682132934
   },
   "trustedPlayers": [
     "roaz"
   ],
   "enemies": [
-    "curix"
+    "curix",
+    "suberjelly"
   ],
-  "attackedBy": {
-    "Suberjelly": 1776681696123
-  },
+  "attackedBy": {},
   "payments": {},
   "facts": {}
 }
