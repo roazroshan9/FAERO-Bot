@@ -36,6 +36,13 @@ class DiscordBridge {
     this._userCooldowns = new Map();
     this._globalBucket  = [];
     this._monitor       = null;
+
+    // ── Live control-panel registry ─────────────────────────────────────────
+    // Keyed by `${channelId}:${panelType}` → { message, timer, expiresAt }
+    // Ensures only ONE auto-updating embed per (channel, type) at any time.
+    this._livePanels = new Map();
+    this.LIVE_INTERVAL_MS = 5000;     // refresh cadence
+    this.LIVE_LEASE_MS    = 30 * 60 * 1000; // auto-stop after 30 min idle
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -114,6 +121,7 @@ class DiscordBridge {
       this.botManager.off('log', this._logListener);
       this._logListener = null;
     }
+    this._teardownAllPanels();
     if (this.client) {
       this.client.destroy();
       this.client = null;
@@ -224,25 +232,9 @@ class DiscordBridge {
         return replyEmbed(embed);
       }
 
-      // ── Status ─────────────────────────────────────────────────────────
+      // ── Status (live-updating control panel) ───────────────────────────
       case 'status': {
-        const s   = bm.getStatus();
-        const pos = s.position ? s.position.x + ', ' + s.position.y + ', ' + s.position.z : 'unknown';
-        const embed = new EmbedBuilder()
-          .setColor(s.running ? 0x39FF14 : 0xFF315F)
-          .setTitle('Bot Status')
-          .addFields(
-            { name: '🟢 Online',    value: s.running ? 'Yes' : 'No',        inline: true },
-            { name: '👤 Username',  value: s.username || '-',                inline: true },
-            { name: '❤️ Health',    value: String(s.health  ?? '-'),         inline: true },
-            { name: '🍖 Hunger',    value: String(s.hunger  ?? '-'),         inline: true },
-            { name: '📍 Position',  value: pos,                              inline: true },
-            { name: '⚡ State',     value: s.state ? s.state.state : 'idle', inline: true },
-            { name: '🤖 AI Mode',   value: s.aiModeEnabled ? 'ON' : 'OFF',  inline: true },
-            { name: '🔋 Low Power', value: s.lowPowerMode  ? 'ON' : 'OFF',  inline: true }
-          )
-          .setTimestamp();
-        return replyEmbed(embed);
+        return this._mountLivePanel(message, 'status', () => this._buildStatusEmbed());
       }
 
       // ── Health ─────────────────────────────────────────────────────────
@@ -263,35 +255,11 @@ class DiscordBridge {
         return reply(lines.join('\n'));
       }
 
-      // ── Resources ──────────────────────────────────────────────────────
+      // ── Resources (live-updating control panel) ────────────────────────
       case 'resources':
       case 'mem':
       case 'memory': {
-        const stats = this._monitor
-          ? this._monitor.getStats()
-          : {
-              heapMB:     Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-              rssMB:      Math.round(process.memoryUsage().rss      / 1024 / 1024),
-              limitMB:    Number(process.env.SAFE_HEAP_MB) || 400,
-              cpuPercent: 0,
-              uptimeMin:  Math.round(process.uptime() / 60)
-            };
-        const pct = Math.round((stats.heapMB / stats.limitMB) * 100);
-        const bar = '█'.repeat(Math.round(pct / 10)) + '░'.repeat(10 - Math.round(pct / 10));
-        const embed = new EmbedBuilder()
-          .setColor(pct >= 90 ? 0xFF315F : pct >= 70 ? 0xFFAA00 : 0x39FF14)
-          .setTitle('Resource Monitor')
-          .addFields(
-            { name: '💾 Heap Used',  value: stats.heapMB + ' MB',     inline: true },
-            { name: '📊 Heap Limit', value: stats.limitMB + ' MB',    inline: true },
-            { name: '🧠 RSS',        value: stats.rssMB + ' MB',      inline: true },
-            { name: '🖥️ CPU',        value: stats.cpuPercent + '%',   inline: true },
-            { name: '⏱ Uptime',     value: stats.uptimeMin + ' min', inline: true },
-            { name: '📈 Heap',       value: bar + ' ' + pct + '%',    inline: false }
-          )
-          .setFooter({ text: 'Auto-disconnect triggers at ' + stats.limitMB + ' MB heap' })
-          .setTimestamp();
-        return replyEmbed(embed);
+        return this._mountLivePanel(message, 'resources', () => this._buildResourcesEmbed());
       }
 
       // ── Chat relay ─────────────────────────────────────────────────────
@@ -571,6 +539,233 @@ class DiscordBridge {
       default:
         return reply('❓ Unknown command. Type `' + PREFIX + ' help` for the command list.');
     }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  LIVE CONTROL-PANEL ENGINE
+  //  Sends ONE embed per (channel × type) and edits it every 5 s.
+  //  Subsequent invocations renew the lease instead of spawning new posts.
+  // ════════════════════════════════════════════════════════════════════════
+
+  async _mountLivePanel(triggerMessage, type, builder) {
+    const channelId = triggerMessage.channelId;
+    const key       = channelId + ':' + type;
+    const existing  = this._livePanels.get(key);
+    const now       = Date.now();
+
+    // ── Renew an existing live panel ────────────────────────────────────────
+    if (existing && existing.message && !existing.message.deleted) {
+      existing.expiresAt = now + this.LIVE_LEASE_MS;
+      try {
+        await existing.message.edit({ embeds: [builder()] });
+        triggerMessage.reply({ content: '◈ Live panel refreshed — auto-update lease extended.', allowedMentions: { repliedUser: false } })
+          .then((m) => setTimeout(() => m.delete().catch(() => {}), 4000))
+          .catch(() => {});
+      } catch (_) {
+        // Message vanished — fall through and remount
+        this._teardownPanel(key);
+        return this._mountLivePanel(triggerMessage, type, builder);
+      }
+      return;
+    }
+
+    // ── Mount a fresh live panel ────────────────────────────────────────────
+    let posted;
+    try {
+      posted = await triggerMessage.channel.send({ embeds: [builder()] });
+    } catch (err) {
+      try { triggerMessage.reply('Failed to send panel: ' + err.message); } catch (_) {}
+      return;
+    }
+
+    const entry = {
+      message:   posted,
+      timer:     null,
+      expiresAt: now + this.LIVE_LEASE_MS,
+      type
+    };
+    this._livePanels.set(key, entry);
+
+    entry.timer = setInterval(async () => {
+      const cur = this._livePanels.get(key);
+      if (!cur) return;
+      if (Date.now() > cur.expiresAt) {
+        // Final edit indicates the panel is now static
+        try { await cur.message.edit({ embeds: [builder({ stale: true })] }); } catch (_) {}
+        this._teardownPanel(key);
+        return;
+      }
+      try {
+        await cur.message.edit({ embeds: [builder()] });
+      } catch (err) {
+        // Permission revoked / message deleted / Discord error
+        this.botManager.log('[discord] Live panel ' + type + ' edit failed: ' + (err && err.message ? err.message : err));
+        this._teardownPanel(key);
+      }
+    }, this.LIVE_INTERVAL_MS);
+
+    triggerMessage.reply({ content: '◈ Live ' + type.toUpperCase() + ' panel mounted — auto-refreshing every ' + Math.round(this.LIVE_INTERVAL_MS / 1000) + 's.', allowedMentions: { repliedUser: false } })
+      .then((m) => setTimeout(() => m.delete().catch(() => {}), 4000))
+      .catch(() => {});
+  }
+
+  _teardownPanel(key) {
+    const entry = this._livePanels.get(key);
+    if (!entry) return;
+    if (entry.timer) clearInterval(entry.timer);
+    this._livePanels.delete(key);
+  }
+
+  _teardownAllPanels() {
+    for (const key of Array.from(this._livePanels.keys())) this._teardownPanel(key);
+  }
+
+  // ── Shared visual constants ─────────────────────────────────────────────
+  static get COLORS() {
+    return {
+      PRIMARY:  0x008080, // dark cyan — enterprise control panel
+      DEGRADED: 0xC9A227, // amber
+      OFFLINE:  0x4A4A4A  // server gray
+    };
+  }
+
+  _progressBar(percent, width) {
+    const w = width || 18;
+    const filled = Math.max(0, Math.min(w, Math.round((percent / 100) * w)));
+    return '[' + '█'.repeat(filled) + '░'.repeat(w - filled) + '] ' + percent + '%';
+  }
+
+  _formatUptime(totalMin) {
+    if (!totalMin || totalMin < 1) return '< 1m';
+    const days  = Math.floor(totalMin / 1440);
+    const hours = Math.floor((totalMin % 1440) / 60);
+    const mins  = Math.floor(totalMin % 60);
+    const parts = [];
+    if (days)  parts.push(days + 'd');
+    if (hours) parts.push(hours + 'h');
+    parts.push(mins + 'm');
+    return parts.join(' ');
+  }
+
+  _systemHealth(s, ka, mem) {
+    if (!s.running) return { code: 'OFFLINE',  symbol: '🔴', color: DiscordBridge.COLORS.OFFLINE };
+    const lowHp     = typeof s.health === 'number' && s.health < 8;
+    const lowFood   = typeof s.hunger === 'number' && s.hunger < 6;
+    const memHigh   = mem && mem.limitMB && (mem.heapMB / mem.limitMB) > 0.8;
+    const netStale  = ka && ka.attached && ka.msSinceLastPacket > 8000;
+    const lagBurst  = ka && ka.lagWarnings > 0;
+    if (lowHp || lowFood || memHigh || netStale || lagBurst) {
+      return { code: 'DEGRADED', symbol: '🟡', color: DiscordBridge.COLORS.DEGRADED };
+    }
+    return { code: 'ONLINE', symbol: '🟢', color: DiscordBridge.COLORS.PRIMARY };
+  }
+
+  // ── Status panel ────────────────────────────────────────────────────────
+  _buildStatusEmbed(opts) {
+    const stale = !!(opts && opts.stale);
+    const bm    = this.botManager;
+    const s     = bm.getStatus();
+    const ka    = bm.keepAlive ? bm.keepAlive.getStats() : null;
+    const mem   = this._monitor ? this._monitor.getStats() : null;
+    const ping  = (bm.bot && bm.bot.player && typeof bm.bot.player.ping === 'number') ? bm.bot.player.ping : null;
+    const verdict = this._systemHealth(s, ka, mem);
+
+    const pos = s.position
+      ? '`X ' + s.position.x + '  Y ' + s.position.y + '  Z ' + s.position.z + '`'
+      : '`unknown`';
+
+    const queue = s.queue || { currentTask: null, pending: [] };
+    const currentTask = queue.currentTask
+      ? '`▶ ' + (queue.currentTask.name || 'task') + '`'
+      : '`▷ idle`';
+    const pendingCount = (queue.pending || []).length;
+
+    const stateName = s.state ? String(s.state.state || 'idle').toUpperCase() : 'IDLE';
+    const stateLine = '`' + stateName + '`' + (s.state && s.state.reason ? ' · ' + s.state.reason : '');
+
+    const networkLine = ka && ka.attached
+      ? '`Ping ' + (ping !== null ? ping + 'ms' : '—') + '  ·  ' + ka.packetsPerSec + ' pkt/s`'
+      : '`— offline —`';
+
+    const vitalsLine = '`HP ' + (s.health ?? '—') + '/20  ·  Food ' + (s.hunger ?? '—') + '/20`';
+    const modeLine   = '`AI ' + (s.aiModeEnabled ? 'ON' : 'OFF') + '  ·  LP ' + (s.lowPowerMode ? 'ON' : 'OFF') + '`';
+
+    const updatedTs  = Math.floor(Date.now() / 1000);
+    const updatedFmt = stale
+      ? '⏸ Auto-update lease expired — call `' + PREFIX + ' status` to resume'
+      : 'Last Updated: <t:' + updatedTs + ':T> · <t:' + updatedTs + ':R>';
+
+    return new EmbedBuilder()
+      .setColor(stale ? DiscordBridge.COLORS.OFFLINE : verdict.color)
+      .setTitle('▣ FAERO Control Panel — System Status')
+      .setDescription('**' + verdict.symbol + ' [' + verdict.code + ']**  ·  Identity: `' + (s.username || '—') + '`')
+      .addFields(
+        { name: '⚙ Operational State', value: stateLine, inline: true },
+        { name: '◈ Mode Flags',         value: modeLine,  inline: true },
+        { name: '\u200b',               value: '\u200b',  inline: true },
+
+        { name: '⚓ Position',          value: pos,         inline: true },
+        { name: '❤ Vitals',             value: vitalsLine,  inline: true },
+        { name: '\u200b',               value: '\u200b',    inline: true },
+
+        { name: '📡 Live Network',      value: networkLine, inline: true },
+        { name: '⚙ Task Queue',         value: currentTask + '  ·  `' + pendingCount + ' queued`', inline: true },
+        { name: '\u200b',               value: '\u200b',    inline: true },
+
+        { name: '\u200b', value: updatedFmt, inline: false }
+      )
+      .setFooter({ text: 'FAERO Engine v2.0 | Core System Monitor' });
+  }
+
+  // ── Resources panel ─────────────────────────────────────────────────────
+  _buildResourcesEmbed(opts) {
+    const stale = !!(opts && opts.stale);
+    const bm    = this.botManager;
+    const ka    = bm.keepAlive ? bm.keepAlive.getStats() : null;
+    const ping  = (bm.bot && bm.bot.player && typeof bm.bot.player.ping === 'number') ? bm.bot.player.ping : null;
+    const mem   = this._monitor
+      ? this._monitor.getStats()
+      : {
+          heapMB:     Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+          rssMB:      Math.round(process.memoryUsage().rss      / 1024 / 1024),
+          limitMB:    Number(process.env.SAFE_HEAP_MB) || 400,
+          cpuPercent: 0,
+          uptimeMin:  Math.round(process.uptime() / 60)
+        };
+    const heapPct = Math.min(100, Math.round((mem.heapMB / Math.max(1, mem.limitMB)) * 100));
+    const verdict = this._systemHealth(bm.getStatus(), ka, mem);
+
+    const heapBar = '`' + this._progressBar(heapPct, 18) + '`';
+    const cpuBar  = '`' + this._progressBar(mem.cpuPercent || 0, 18) + '`';
+
+    const networkLine = ka && ka.attached
+      ? '`Ping ' + (ping !== null ? ping + 'ms' : '—') + '  ·  ' + ka.packetsPerSec + ' pkt/s`'
+      : '`— offline —`';
+
+    const updatedTs  = Math.floor(Date.now() / 1000);
+    const updatedFmt = stale
+      ? '⏸ Auto-update lease expired — call `' + PREFIX + ' resources` to resume'
+      : 'Last Updated: <t:' + updatedTs + ':T> · <t:' + updatedTs + ':R>';
+
+    return new EmbedBuilder()
+      .setColor(stale ? DiscordBridge.COLORS.OFFLINE : verdict.color)
+      .setTitle('▣ FAERO Control Panel — Resource Monitor')
+      .setDescription('**' + verdict.symbol + ' [' + verdict.code + ']**  ·  Process uptime: `' + this._formatUptime(mem.uptimeMin) + '`')
+      .addFields(
+        { name: '💾 Heap',    value: '`' + mem.heapMB + ' / ' + mem.limitMB + ' MB`', inline: true },
+        { name: '🧠 RSS',     value: '`' + mem.rssMB + ' MB`',                         inline: true },
+        { name: '\u200b',    value: '\u200b',                                         inline: true },
+
+        { name: '⚙ CPU',      value: '`' + (mem.cpuPercent || 0) + ' %`', inline: true },
+        { name: '📡 Network', value: networkLine,                          inline: true },
+        { name: '\u200b',    value: '\u200b',                              inline: true },
+
+        { name: '▮ Heap Usage', value: heapBar, inline: false },
+        { name: '▮ CPU Load',   value: cpuBar,  inline: false },
+
+        { name: '\u200b', value: updatedFmt, inline: false }
+      )
+      .setFooter({ text: 'FAERO Engine v2.0 | Core System Monitor · Heap ceiling ' + mem.limitMB + ' MB' });
   }
 }
 
