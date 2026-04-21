@@ -88,6 +88,20 @@
             <div><dt>Status</dt><dd id="runtimeStatus">-</dd></div>
             <div><dt>Restarts</dt><dd id="restartCount">0</dd></div>
           </dl>
+
+          <div class="keepalive-widget" id="keepaliveWidget" data-state="idle">
+            <div class="keepalive-header">
+              <span class="keepalive-pulse" id="keepalivePulse"></span>
+              <span class="keepalive-title">CONNECTION HEALTH</span>
+              <span class="keepalive-status" id="keepaliveStatus">Idle</span>
+            </div>
+            <dl class="keepalive-stats">
+              <div><dt>Packets/sec</dt><dd id="kaPacketRate">—</dd></div>
+              <div><dt>Last packet</dt><dd id="kaLastPacket">—</dd></div>
+              <div><dt>Lag warns</dt><dd id="kaLagWarns">0</dd></div>
+              <div><dt>Silence warns</dt><dd id="kaSilenceWarns">0</dd></div>
+            </dl>
+          </div>
           <div class="control-row low-power-row">
             <button id="aiModeToggle" class="ai-mode-off">AI Mode: OFF</button>
             <button id="lowPowerToggle" class="low-power-off">Low Power Mode: OFF</button>

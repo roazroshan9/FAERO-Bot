@@ -7,6 +7,9 @@ function attachSocket(io, botManager) {
     socket.emit('status', botManager.getStatus());
     socket.emit('thought', buildThoughtPayload(botManager, null));
     socket.emit('inventory', botManager.getInventory());
+    if (botManager.keepAlive) {
+      socket.emit('keepalive', botManager.keepAlive.getStats());
+    }
     socket.on('start', async (options) => {
       try {
         const connection = normalizeConnectionOptions(options);
@@ -115,6 +118,7 @@ function attachSocket(io, botManager) {
   botManager.on('queue', () => io.emit('status', botManager.getStatus()));
   botManager.on('botError', (err) => io.emit('errorMessage', err && err.message ? err.message : String(err)));
   botManager.on('thought', (payload) => io.emit('thought', buildThoughtPayload(botManager, payload)));
+  botManager.on('keepalive', (stats) => io.emit('keepalive', stats));
 }
 
 function normalizeConnectionOptions(options) {

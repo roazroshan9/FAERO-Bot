@@ -31,6 +31,11 @@ class KeepAlive {
     this._packetHandler = null;
     this._onWarn      = (opts && opts.onWarn) || (() => {});
     this._stats       = { warnings: 0, lagWarnings: 0, packets: 0 };
+    // Rolling 10-second packet window for packets/sec calculation
+    this._packetWindow = []; // array of timestamps (ms)
+    this._windowMs = 10000;
+    this._onTick = (opts && opts.onTick) || null;
+    this._tickTimer = null;
   }
 
   attach(bot) {
@@ -38,14 +43,29 @@ class KeepAlive {
     this._bot = bot;
     this._lastPacket = Date.now();
     this._lastLagMark = Date.now();
+    this._packetWindow = [];
 
     // Mineflayer exposes the underlying minecraft-protocol client
     if (bot && bot._client && typeof bot._client.on === 'function') {
       this._packetHandler = () => {
-        this._lastPacket = Date.now();
+        const now = Date.now();
+        this._lastPacket = now;
         this._stats.packets++;
+        this._packetWindow.push(now);
+        // Trim entries older than the window
+        const cutoff = now - this._windowMs;
+        while (this._packetWindow.length && this._packetWindow[0] < cutoff) {
+          this._packetWindow.shift();
+        }
       };
       bot._client.on('packet', this._packetHandler);
+    }
+
+    // Periodic emit of live stats (every 2s) for dashboards
+    if (this._onTick) {
+      this._tickTimer = setInterval(() => {
+        try { this._onTick(this.getStats()); } catch (_) {}
+      }, 2000);
     }
 
     // Packet-silence watchdog
@@ -81,12 +101,14 @@ class KeepAlive {
   }
 
   detach() {
-    if (this._timer)    { clearInterval(this._timer);  this._timer = null; }
-    if (this._lagTimer) { clearTimeout(this._lagTimer); this._lagTimer = null; }
+    if (this._timer)     { clearInterval(this._timer);  this._timer = null; }
+    if (this._lagTimer)  { clearTimeout(this._lagTimer); this._lagTimer = null; }
+    if (this._tickTimer) { clearInterval(this._tickTimer); this._tickTimer = null; }
     if (this._bot && this._bot._client && this._packetHandler) {
       try { this._bot._client.removeListener('packet', this._packetHandler); } catch (_) {}
     }
     this._packetHandler = null;
+    this._packetWindow = [];
     this._bot = null;
   }
 
@@ -94,9 +116,22 @@ class KeepAlive {
     return Date.now() - this._lastPacket;
   }
 
+  packetsPerSecond() {
+    if (!this._packetWindow.length) return 0;
+    const now = Date.now();
+    const cutoff = now - this._windowMs;
+    while (this._packetWindow.length && this._packetWindow[0] < cutoff) {
+      this._packetWindow.shift();
+    }
+    if (!this._packetWindow.length) return 0;
+    const span = Math.max(1, now - this._packetWindow[0]) / 1000;
+    return Math.round((this._packetWindow.length / span) * 10) / 10;
+  }
+
   getStats() {
     return Object.assign({}, this._stats, {
       msSinceLastPacket: this.msSinceLastPacket(),
+      packetsPerSec: this.packetsPerSecond(),
       attached: !!this._bot
     });
   }

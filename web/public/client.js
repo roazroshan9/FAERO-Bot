@@ -934,3 +934,46 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
     _confirmCallback = null;
   }
 });
+
+// ─── Connection Health (KeepAlive) widget ────────────────────────────────
+(function () {
+  const widget   = document.getElementById('keepaliveWidget');
+  if (!widget) return;
+  const elStatus = document.getElementById('keepaliveStatus');
+  const elRate   = document.getElementById('kaPacketRate');
+  const elLast   = document.getElementById('kaLastPacket');
+  const elLag    = document.getElementById('kaLagWarns');
+  const elSil    = document.getElementById('kaSilenceWarns');
+
+  function formatMs(ms) {
+    if (ms == null) return '—';
+    if (ms < 1000) return ms + ' ms';
+    return (ms / 1000).toFixed(1) + ' s';
+  }
+
+  function classify(stats) {
+    if (!stats || !stats.attached) return { state: 'idle', label: 'Idle' };
+    if (stats.msSinceLastPacket > 22000) return { state: 'bad',  label: 'Lagging' };
+    if (stats.msSinceLastPacket > 8000)  return { state: 'warn', label: 'Slow' };
+    if (stats.lagWarnings > 0 && Date.now() - (window._lastLagWarnAt || 0) < 30000) {
+      return { state: 'warn', label: 'Loop lag' };
+    }
+    return { state: 'healthy', label: 'Online' };
+  }
+
+  let lastSeen = { lagWarnings: 0 };
+  socket.on('keepalive', (stats) => {
+    if (!stats) return;
+    if (stats.lagWarnings > (lastSeen.lagWarnings || 0)) {
+      window._lastLagWarnAt = Date.now();
+    }
+    lastSeen = stats;
+    const verdict = classify(stats);
+    widget.dataset.state = verdict.state;
+    elStatus.textContent = verdict.label;
+    elRate.textContent = stats.attached ? (stats.packetsPerSec + ' pkt/s') : '—';
+    elLast.textContent = stats.attached ? formatMs(stats.msSinceLastPacket) : '—';
+    elLag.textContent  = stats.lagWarnings || 0;
+    elSil.textContent  = stats.warnings || 0;
+  });
+})();

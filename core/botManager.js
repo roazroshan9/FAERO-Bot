@@ -39,7 +39,8 @@ class BotManager extends EventEmitter {
     this.cleanupTimer = null;
     this._dangerWatchTimer = null;
     this.keepAlive = new KeepAlive({
-      onWarn: (info) => this.log('[keepalive] ' + info.message)
+      onWarn: (info) => this.log('[keepalive] ' + info.message),
+      onTick: (stats) => this.emit('keepalive', stats)
     });
     this.lastCommandAt = 0;
     this.commandCooldownMs = readPositiveInt(process.env.COMMAND_COOLDOWN_MS, 2000);
