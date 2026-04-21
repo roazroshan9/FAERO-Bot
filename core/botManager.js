@@ -16,6 +16,7 @@ const Brain        = require('../ai/brain');
 const survival     = require('../modules/survival');
 const commands     = require('../modules/commands');
 const combat       = require('../modules/combat');
+const { KeepAlive } = require('./keepAlive');
 
 class BotManager extends EventEmitter {
   constructor() {
@@ -37,6 +38,9 @@ class BotManager extends EventEmitter {
     this.aiModeEnabled = false;
     this.cleanupTimer = null;
     this._dangerWatchTimer = null;
+    this.keepAlive = new KeepAlive({
+      onWarn: (info) => this.log('[keepalive] ' + info.message)
+    });
     this.lastCommandAt = 0;
     this.commandCooldownMs = readPositiveInt(process.env.COMMAND_COOLDOWN_MS, 2000);
     this.commands = new Map();
@@ -144,6 +148,8 @@ class BotManager extends EventEmitter {
       this.startBrain();
       this.startDangerWatch(bot);
       this.attachInventoryEvents(bot);
+      this.keepAlive.attach(bot);
+      this.log('[keepalive] watchdog attached');
       this.emit('bot', this.getStatus());
       this.emit('inventory', this.getInventory());
     });
@@ -194,6 +200,7 @@ class BotManager extends EventEmitter {
       this.log('Disconnected: ' + (reason || 'connection ended'));
       this._stopDangerWatch();
       this.stopBrain();
+      try { this.keepAlive.detach(); } catch (_) {}
       this.bot = null;
       this.emit('bot', this.getStatus());
       if (this.shouldReconnect) {

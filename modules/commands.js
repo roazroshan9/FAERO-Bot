@@ -27,6 +27,7 @@ const { STATES }    = require('../core/stateManager');
 const roles         = require('../config/roles');
 const Vec3          = require('vec3').Vec3;
 const { AreaScanner, SCAN_RANGE } = require('./scanner');
+const securityLog                 = require('../core/securityLog');
 
 // ─── Module-level scanner singleton (per-process; attached to ctx.manager) ────
 // Using a module singleton ensures `!mineblock` and `!mode mine` share the same
@@ -419,7 +420,14 @@ function handleChat(ctx, username, message) {
   if (username === ctx.bot.username) return false;
 
   const tier = roles.getMcTier(username);
-  if (tier === roles.TIERS.NONE) return false;
+  // NONE-tier: log unauthorized !command attempts to security log
+  if (tier === roles.TIERS.NONE) {
+    const raw = String(message || '');
+    if (raw.startsWith('!')) {
+      securityLog.logUnauthorized(username, raw, 'mc');
+    }
+    return false;
+  }
 
   const raw  = String(message || '');
   const norm = raw.trim().toLowerCase();
@@ -510,6 +518,13 @@ function handleCommand(ctx, username, message, tier) {
     if (roles.canMinecraft(username, cmd)) return true;
     const required = roles.MC_PERMISSIONS[cmd] !== undefined
       ? roles.MC_PERMISSIONS[cmd] : roles.TIERS.OWNER;
+    // Log denial to security audit file
+    securityLog.logDeny(
+      username, cmd,
+      roles.tierName(userTier),
+      roles.tierName(required),
+      'mc'
+    );
     say(bot,
       'Permission denied — [' + cmd + '] requires ' + roles.tierName(required) +
       ' access. Your role: ' + roles.tierName(userTier)
@@ -633,14 +648,26 @@ function handleCommand(ctx, username, message, tier) {
         say(bot, 'Arrived.');
       });
 
-    case 'stop':
+    case 'stop': {
+      // ── Top-priority STOP — bypass queue entirely ──────────────────────
+      // Executes synchronously so it interrupts any running task immediately.
+      // Order matters: stop scanner first (cheap), then movement, then queue.
+      try { getScanner().stop(); } catch (_) {}
       clearMode(ctx);
       stopGuardianMode(ctx);
-      return commandTask('Stop', async () => {
-        pathfinding.stop(bot);
-        combat.stopCombat(bot);
-        say(bot, 'All tasks halted. Standing by.');
-      });
+      try { pathfinding.stop(bot); } catch (_) {}
+      try { combat.stopCombat(bot); } catch (_) {}
+      try { queue.clear(); } catch (_) {}
+      if (ctx.manager) {
+        ctx.manager._pendingWanderSearch = null;
+        if (ctx.manager.commandInterrupt) {
+          try { ctx.manager.commandInterrupt(); } catch (_) {}
+        }
+      }
+      state.reset('!stop command');
+      say(bot, 'STOP — all tasks halted, scanner off, mode idle, queue cleared.');
+      return true;
+    }
 
     case 'goto':
       return commandTask('Goto', async () => {

@@ -1,6 +1,10 @@
 const { goals, Movements } = require('mineflayer-pathfinder');
 const Vec3 = require('vec3').Vec3;
 
+// Hard timeout for the entire goToCoords operation (ms). Prevents the bot
+// from getting stuck forever on impossible / repeatedly-failing paths.
+const HARD_PATH_TIMEOUT_MS = 30000;
+
 function setupMovements(bot) {
   if (!bot.pathfinder || !bot.registry) return null;
 
@@ -19,10 +23,16 @@ function setupMovements(bot) {
   });
 
   bot.pathfinder.setMovements(movements);
+
+  // Bound pathfinder CPU so it can never stall the event loop
+  bot.pathfinder.thinkTimeout = 5000;  // max ms thinking per call
+  bot.pathfinder.tickTimeout  = 40;    // max ms thinking per tick
+
   return movements;
 }
 
-// ✅ SAFE GO TO (no crash)
+// ✅ SAFE GO TO — single attempt, hard wall-clock timeout, clean error.
+//    Never loops. Never blocks. Always cancellable via bot.pathfinder.stop().
 async function goToCoords(bot, x, y, z, range) {
   setupMovements(bot);
 
@@ -31,20 +41,32 @@ async function goToCoords(bot, x, y, z, range) {
   const nz = Number(z);
 
   if (!Number.isFinite(nx) || !Number.isFinite(ny) || !Number.isFinite(nz)) {
-    bot.chat("Invalid coordinates!");
-    return;
+    throw new Error('Pathfinding failed — invalid coordinates ' + x + ' ' + y + ' ' + z);
   }
 
   const goal = new goals.GoalNear(nx, ny, nz, range || 1);
 
+  // Wrap pathfinder.goto with a hard timeout so we can't get stuck.
+  let timeoutHandle;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      try { bot.pathfinder.setGoal(null); bot.pathfinder.stop(); } catch (_) {}
+      reject(new Error('Pathfinding failed — wall-clock timeout (' + HARD_PATH_TIMEOUT_MS + 'ms) reached'));
+    }, HARD_PATH_TIMEOUT_MS);
+  });
+
   try {
-    await bot.pathfinder.goto(goal);
+    await Promise.race([bot.pathfinder.goto(goal), timeoutPromise]);
   } catch (err) {
     const msg = err && err.message ? err.message.toLowerCase() : '';
-    if (msg.includes('no path') || msg.includes('cannot find')) {
-      throw new Error('no path found to ' + nx + ' ' + ny + ' ' + nz);
+    // Always reset pathfinder state so the next call starts clean
+    try { bot.pathfinder.setGoal(null); } catch (_) {}
+    if (msg.includes('no path') || msg.includes('cannot find') || msg.includes('timeout') || msg.includes('took to long')) {
+      throw new Error('Pathfinding failed — no safe route to ' + nx + ' ' + ny + ' ' + nz);
     }
     throw err;
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
   }
 }
 
