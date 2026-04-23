@@ -163,6 +163,70 @@ function mountRoutes(app, io, botManager) {
     res.json(botManager.getInventory());
   });
 
+  // ── Waypoints (persistent named locations, MongoDB-backed) ─────────────
+  const wpModels = require('../lib/persistence/models');
+  const wpRoles  = require('../config/roles');
+  const wpMongo  = require('../lib/persistence/mongo');
+  const wpOwner  = () => wpRoles.getConfig().ownerMcName || 'faero';
+  const wpName   = (raw) => {
+    const s = String(raw || '').trim().toLowerCase();
+    if (!/^[a-z0-9_-]{1,32}$/.test(s)) return null;
+    return s;
+  };
+  const wpErr = (res, code, message) => res.status(code).json({
+    ok: false,
+    error: { code: code === 404 ? 'WAYPOINT_NOT_FOUND' : code === 400 ? 'WAYPOINT_INVALID' : 'WAYPOINT_ERROR',
+             title: code === 404 ? 'Waypoint Not Found' : code === 400 ? 'Invalid Request' : 'Waypoint System Error',
+             message, color: '#FF1F1F' }
+  });
+
+  app.get('/bot-api/waypoints', async (req, res) => {
+    if (!wpMongo.isReady()) return wpErr(res, 503, 'Persistence offline — waypoints unavailable in Local-Only Mode.');
+    const list = await wpModels.listLocations(wpOwner());
+    res.json({ ok: true, owner: wpOwner(), waypoints: list.map(w => ({
+      label: w.label, x: w.x, y: w.y, z: w.z, dimension: w.dimension, updatedAt: w.updatedAt
+    }))});
+  });
+
+  app.post('/bot-api/waypoints', async (req, res) => {
+    if (!wpMongo.isReady()) return wpErr(res, 503, 'Persistence offline — waypoints cannot be saved.');
+    const name = wpName(req.body && req.body.name);
+    if (!name) return wpErr(res, 400, 'Waypoint name must be 1-32 chars: a-z, 0-9, _ or -.');
+    const bot = botManager.bot;
+    if (!bot || !bot.entity) return wpErr(res, 409, 'Bot is offline — cannot capture current coordinates.');
+    const pos = bot.entity.position;
+    const ok = await wpModels.upsertLocation({ owner: wpOwner(), label: name, x: pos.x, y: pos.y, z: pos.z });
+    if (!ok) return wpErr(res, 500, 'Persistence write failed for waypoint [' + name + '].');
+    res.json({ ok: true, waypoint: { label: name, x: pos.x, y: pos.y, z: pos.z } });
+  });
+
+  app.delete('/bot-api/waypoints/:name', async (req, res) => {
+    if (!wpMongo.isReady()) return wpErr(res, 503, 'Persistence offline — cannot delete waypoint.');
+    const name = wpName(req.params.name);
+    if (!name) return wpErr(res, 400, 'Invalid waypoint name.');
+    const r = await wpModels.deleteLocation(wpOwner(), name);
+    if (!r.ok) return wpErr(res, 404, 'Waypoint [' + name + '] does not exist.');
+    res.json({ ok: true, deleted: name });
+  });
+
+  app.post('/bot-api/waypoints/:name/go', async (req, res) => {
+    if (!wpMongo.isReady()) return wpErr(res, 503, 'Persistence offline — cannot resolve waypoint.');
+    const name = wpName(req.params.name);
+    if (!name) return wpErr(res, 400, 'Invalid waypoint name.');
+    const wp = await wpModels.findLocation(wpOwner(), name);
+    if (!wp) return wpErr(res, 404, 'Waypoint [' + name + '] does not exist.');
+    const bot = botManager.bot;
+    if (!bot || !bot.entity) return wpErr(res, 409, 'Bot is offline — cannot navigate to waypoint.');
+    try {
+      const pathfinding = require('../modules/pathfinding');
+      pathfinding.goToCoords(bot, wp.x, wp.y, wp.z, 1).catch(() => {});
+      botManager.log('[waypoint] Navigation started to [' + name + '] at ' + Math.round(wp.x) + ',' + Math.round(wp.y) + ',' + Math.round(wp.z));
+      res.json({ ok: true, navigatingTo: { label: name, x: wp.x, y: wp.y, z: wp.z } });
+    } catch (err) {
+      wpErr(res, 500, 'Navigation failed: ' + err.message);
+    }
+  });
+
   app.post('/bot-api/test-proxy', async (req, res) => {
     const { SocksClient } = require('socks');
     const proxyUrl = String((req.body && req.body.proxy) || '').trim();

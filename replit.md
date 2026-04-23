@@ -15,7 +15,8 @@ A standalone CommonJS JavaScript AI Minecraft bot (FAERO) has been added at the 
 - **Persistence**: `lib/persistence/mongo.js` + `lib/persistence/models.js` — Mongoose schemas for `UserRoles`, `SavedLocations`, `Logs`. Reads `MONGODB_URI` from `.env` / Replit Secrets; **falls back to Local-Only Mode automatically** when the URI is missing or unreachable
 - **Survival automation**: `modules/survival.js` provides `ensurePickaxe()` (auto-craft on tool break inside `!mode mine`) and `mineflayer-auto-eat` config; `modules/inventory.js` exports `sortInventory()` (called by `!sort` and the mine-mode loop at ≥90% capacity)
 - **Rate limiting**: per-user + global sliding-window bucket in `discord/client.js`
-- **RBAC**: `config/roles.js` — OWNER / ADMIN / MANAGER / NONE tiers for Discord and in-game commands; `!sort` is MANAGER-tier
+- **RBAC**: `config/roles.js` — OWNER / ADMIN / MANAGER / NONE tiers for Discord and in-game commands; `!sort` and `!waypoint` are MANAGER-tier
+- **Waypoints**: persistent named locations on top of `SavedLocations` collection. In-game: `!waypoint set|list|tp|delete <name>`. Discord: `!bot waypoints [tp <name>]` (red embed on not-found). Dashboard panel + REST API at `/bot-api/waypoints` (GET/POST, DELETE/:name, POST/:name/go) with unified error envelope `{ ok:false, error:{ code, title, message, color } }`
 
 ## Stack
 

@@ -47,6 +47,7 @@ const DISCORD_PERMISSIONS = Object.freeze({
   status:            TIERS.MANAGER,
   health:            TIERS.MANAGER,
   logs:              TIERS.MANAGER,
+  waypoints:         TIERS.MANAGER,
 
   // ── ADMIN + OWNER ────────────────────────────────────────────────────────
   chat:              TIERS.ADMIN,
@@ -125,6 +126,7 @@ const MC_PERMISSIONS = Object.freeze({
   dropall:        TIERS.ADMIN,
   store:          TIERS.ADMIN,
   sort:           TIERS.MANAGER,
+  waypoint:       TIERS.MANAGER,
   // Building
   build:          TIERS.ADMIN,
   // Debug (Admin+)

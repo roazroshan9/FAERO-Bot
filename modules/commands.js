@@ -343,6 +343,17 @@ function parseIntent(text) {
   if (/^(retreat|flee|run away|escape|fall back|get away)$/.test(text)) return { cmd: 'retreat' };
   if (/^(sethome|set home|save home|mark home|home point)$/.test(text)) return { cmd: 'sethome' };
   if (/^(home|go home|return home|back to base|base)$/.test(text)) return { cmd: 'home' };
+
+  // ── Waypoints (multi-location named storage) ─────────────────────────────
+  m = text.match(/^waypoints?\s+(set|save|add)\s+([a-z0-9_-]{1,32})$/);
+  if (m) return { cmd: 'waypoint', action: 'set', name: m[2] };
+  m = text.match(/^waypoints?\s+(list|ls|show|all)$/);
+  if (m) return { cmd: 'waypoint', action: 'list' };
+  m = text.match(/^waypoints?\s+(tp|go|goto|teleport|navigate)\s+([a-z0-9_-]{1,32})$/);
+  if (m) return { cmd: 'waypoint', action: 'tp', name: m[2] };
+  m = text.match(/^waypoints?\s+(delete|del|remove|rm)\s+([a-z0-9_-]{1,32})$/);
+  if (m) return { cmd: 'waypoint', action: 'delete', name: m[2] };
+
   if (/^(wander|roam|explore|drift|walk around|patrol)$/.test(text)) return { cmd: 'wander' };
   if (/^(tasklist|tasks|queue|task queue|what are you doing|current tasks)$/.test(text)) return { cmd: 'tasklist' };
   if (/^(cleartasks|clear tasks|cancel all|abort all|flush tasks)$/.test(text)) return { cmd: 'cleartasks' };
@@ -606,7 +617,8 @@ function handleCommand(ctx, username, message, tier) {
       bot.chat('[FAERO]: Role: ' + roles.tierName(userTier) + ' | Mode: ' + mode);
       bot.chat('[FAERO]: Movement: !follow !come !tp <player> !wander !sethome !home');
       bot.chat('[FAERO]: Mining:   !mineblock <block> [n] | !mine_iron | !wood');
-      bot.chat('[FAERO]: Survival: !eat | !food | !inv | !equip <item> | !retreat');
+      bot.chat('[FAERO]: Survival: !eat | !food | !inv | !equip <item> | !retreat | !sort');
+      bot.chat('[FAERO]: Waypoints: !waypoint set|list|tp|delete <name>');
       bot.chat('[FAERO]: AI Modes: !mode idle|survival|guard|farm|mine');
       bot.chat('[FAERO]: Combat:   !pvp on|off | !target <mob> | !protect');
       bot.chat('[FAERO]: Debug:    !tasklist | !debug on|off | !status');
@@ -877,6 +889,67 @@ function handleCommand(ctx, username, message, tier) {
         await bot.equip(stack, 'hand');
         say(bot, 'Equipped ' + stack.displayName + ' to main hand.');
       });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // WAYPOINTS — named, persistent locations (MongoDB-backed)
+    // ════════════════════════════════════════════════════════════════════════
+    case 'waypoint': {
+      const action = intent.action;
+      const name   = intent.name;
+      const owner  = roles.getConfig().ownerMcName || username;
+
+      if (action === 'set') {
+        const pos = bot.entity.position;
+        models.upsertLocation({ owner, label: name, x: pos.x, y: pos.y, z: pos.z })
+          .then((ok) => {
+            if (ok) say(bot, 'Waypoint [' + name + '] saved at ' + round1(pos.x) + ' ' + round1(pos.y) + ' ' + round1(pos.z) + '.');
+            else    say(bot, 'Error — waypoint [' + name + '] not saved (persistence offline).');
+          })
+          .catch((err) => say(bot, 'Error — waypoint save failed: ' + (err && err.message ? err.message : 'unknown')));
+        return true;
+      }
+
+      if (action === 'list') {
+        models.listLocations(owner)
+          .then((all) => {
+            if (!all.length) {
+              say(bot, 'No waypoints saved. Use !waypoint set <name> to create one.');
+              return;
+            }
+            const summary = all.slice(0, 10).map(w =>
+              w.label + ' (' + Math.round(w.x) + ',' + Math.round(w.y) + ',' + Math.round(w.z) + ')'
+            ).join(' | ');
+            say(bot, 'Waypoints (' + all.length + '): ' + summary);
+          })
+          .catch(() => say(bot, 'Error — could not load waypoints (persistence offline).'));
+        return true;
+      }
+
+      if (action === 'tp') {
+        return commandTask('Waypoint TP ' + name, async () => {
+          const wp = await models.findLocation(owner, name);
+          if (!wp) {
+            say(bot, 'Error — waypoint [' + name + '] not found. Use !waypoint list to see saved points.');
+            return;
+          }
+          say(bot, 'Navigating to waypoint [' + name + '] at ' + round1(wp.x) + ' ' + round1(wp.y) + ' ' + round1(wp.z) + '.');
+          await pathfinding.goToCoords(bot, wp.x, wp.y, wp.z, 1);
+          say(bot, 'Arrived at waypoint [' + name + '].');
+        });
+      }
+
+      if (action === 'delete') {
+        models.deleteLocation(owner, name)
+          .then((r) => {
+            if (r.ok) say(bot, 'Waypoint [' + name + '] deleted.');
+            else if (r.reason === 'offline') say(bot, 'Error — cannot delete waypoint (persistence offline).');
+            else say(bot, 'Error — waypoint [' + name + '] not found.');
+          })
+          .catch((err) => say(bot, 'Error — delete failed: ' + (err && err.message ? err.message : 'unknown')));
+        return true;
+      }
+      return false;
     }
 
     case 'sort':

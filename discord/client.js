@@ -180,7 +180,7 @@ class DiscordBridge {
 
   // ── RBAC middleware + dispatcher ──────────────────────────────────────────
 
-  _handleMessage(message) {
+  async _handleMessage(message) {
     const raw    = message.content.slice(PREFIX.length).trim();
     const parts  = raw.split(/\s+/);
     const cmd    = (parts[0] || 'help').toLowerCase();
@@ -272,6 +272,66 @@ class DiscordBridge {
       case 'health': {
         const s = bm.getStatus();
         return reply('❤️ Health: **' + (s.health ?? '-') + '** | 🍖 Hunger: **' + (s.hunger ?? '-') + '**');
+      }
+
+      // ── Waypoints ─────────────────────────────────────────────────────
+      // Subcommands: list (default) | tp <name>
+      case 'waypoints':
+      case 'waypoint': {
+        const models = require('../lib/persistence/models');
+        const owner  = roles.getConfig().ownerMcName;
+        const sub    = (args[0] || 'list').toLowerCase();
+
+        if (sub === 'tp' || sub === 'go' || sub === 'goto') {
+          const name = String(args[1] || '').toLowerCase();
+          if (!name) {
+            return replyEmbed(new EmbedBuilder()
+              .setColor(0xFF1F1F)
+              .setTitle('▣ Waypoint Error')
+              .setDescription('Usage: `!bot waypoint tp <name>`')
+              .setFooter({ text: 'FAERO Waypoint System' }));
+          }
+          const wp = await models.findLocation(owner, name);
+          if (!wp) {
+            return replyEmbed(new EmbedBuilder()
+              .setColor(0xFF1F1F)
+              .setTitle('▣ Waypoint Not Found')
+              .setDescription('No waypoint named `' + name + '` exists in the registry.')
+              .addFields({ name: 'Hint', value: 'Run `!bot waypoints` to see all saved locations.', inline: false })
+              .setFooter({ text: 'FAERO Waypoint System' }));
+          }
+          if (!bm.bot || !bm.bot.entity) {
+            return replyEmbed(new EmbedBuilder()
+              .setColor(0xFF1F1F)
+              .setTitle('▣ Waypoint TP Failed')
+              .setDescription('Bot is offline — cannot navigate to `' + name + '`.')
+              .setFooter({ text: 'FAERO Waypoint System' }));
+          }
+          try { bm.runWebCommand('waypointTp', { name }); } catch (_) {}
+          return replyEmbed(new EmbedBuilder()
+            .setColor(DiscordBridge.COLORS.PRIMARY)
+            .setTitle('▣ Waypoint Navigation')
+            .setDescription('Navigating to **' + name + '** at `' + Math.round(wp.x) + ', ' + Math.round(wp.y) + ', ' + Math.round(wp.z) + '`.')
+            .setFooter({ text: 'FAERO Waypoint System' }));
+        }
+
+        // Default: list
+        const all = await models.listLocations(owner);
+        const embed = new EmbedBuilder()
+          .setColor(DiscordBridge.COLORS.PRIMARY)
+          .setTitle('▣ Waypoint Registry')
+          .setFooter({ text: 'FAERO Waypoint System • ' + all.length + ' saved' });
+        if (!all.length) {
+          embed.setDescription('No waypoints saved. Use `!waypoint set <name>` in-game to create one.');
+        } else {
+          embed.setDescription('Persisted locations for `' + owner + '`:');
+          all.slice(0, 25).forEach(w => embed.addFields({
+            name: '◆ ' + w.label,
+            value: '`X ' + Math.round(w.x) + '  Y ' + Math.round(w.y) + '  Z ' + Math.round(w.z) + '`',
+            inline: true
+          }));
+        }
+        return replyEmbed(embed);
       }
 
       // ── Logs ───────────────────────────────────────────────────────────

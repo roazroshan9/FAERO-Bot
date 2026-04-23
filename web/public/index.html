@@ -273,6 +273,27 @@ reason: waiting</pre>
           </div>
         </div>
 
+        <div class="card wide glass-panel waypoints-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">PERSISTENCE</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <div class="wp-header-row">
+            <h2>Waypoints</h2>
+            <span id="wpStatus" class="wp-status">—</span>
+          </div>
+          <p class="chat-help">Save the bot's current coordinates as a named waypoint. Stored persistently in MongoDB.</p>
+          <div class="control-row wp-input-row">
+            <input id="wpName" placeholder="Waypoint name (a-z, 0-9, _, -)" maxlength="32" autocomplete="off">
+            <button id="wpSetBtn" class="wp-set-btn">Set Current Position</button>
+            <button id="wpRefreshBtn" class="wp-refresh-btn">Refresh</button>
+          </div>
+          <div id="wpError" class="wp-error" style="display:none"></div>
+          <div id="wpList" class="wp-list">
+            <div class="wp-empty">No waypoints loaded yet.</div>
+          </div>
+        </div>
+
         <div class="card wide glass-panel diagnostics-panel">
           <div class="panel-title-row">
             <p class="eyebrow">NETWORK</p>

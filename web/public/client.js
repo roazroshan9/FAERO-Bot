@@ -516,6 +516,94 @@ function formatRuntimeStatus(status) {
 
 socket.on('inventory', renderInventory);
 
+// ── Waypoints panel ─────────────────────────────────────────────────────
+const wpNameInput = document.getElementById('wpName');
+const wpSetBtn    = document.getElementById('wpSetBtn');
+const wpRefreshBtn= document.getElementById('wpRefreshBtn');
+const wpListEl    = document.getElementById('wpList');
+const wpStatusEl  = document.getElementById('wpStatus');
+const wpErrorEl   = document.getElementById('wpError');
+
+function wpShowError(payload) {
+  if (!wpErrorEl) return;
+  const err = payload && payload.error ? payload.error : null;
+  if (!err) { wpErrorEl.style.display = 'none'; wpErrorEl.textContent = ''; return; }
+  wpErrorEl.innerHTML =
+    '<div class="wp-error-title">▣ ' + (err.title || 'Waypoint Error') + '</div>' +
+    '<div class="wp-error-msg">' + (err.message || 'Unknown error.') + '</div>';
+  wpErrorEl.style.display = 'block';
+  setTimeout(() => { wpErrorEl.style.display = 'none'; }, 6000);
+}
+
+async function wpFetch(url, opts) {
+  const r = await fetch(url, opts);
+  let body = null;
+  try { body = await r.json(); } catch (_) {}
+  if (!r.ok) wpShowError(body);
+  return { ok: r.ok, body };
+}
+
+async function loadWaypoints() {
+  const { ok, body } = await wpFetch('/bot-api/waypoints');
+  if (!ok || !body || !body.ok) {
+    wpStatusEl.textContent = 'offline';
+    wpListEl.innerHTML = '<div class="wp-empty">Persistence offline — waypoints unavailable.</div>';
+    return;
+  }
+  const list = body.waypoints || [];
+  wpStatusEl.textContent = list.length + ' saved · owner: ' + body.owner;
+  if (!list.length) {
+    wpListEl.innerHTML = '<div class="wp-empty">No waypoints saved yet. Position the bot and click Set.</div>';
+    return;
+  }
+  wpListEl.innerHTML = list.map(w => {
+    const safe = String(w.label).replace(/[^a-z0-9_-]/gi, '');
+    return '<div class="wp-row">' +
+      '<div class="wp-row-info">' +
+        '<span class="wp-row-name">' + safe + '</span>' +
+        '<span class="wp-row-coords">X ' + Math.round(w.x) + '  Y ' + Math.round(w.y) + '  Z ' + Math.round(w.z) + '</span>' +
+      '</div>' +
+      '<div class="wp-row-actions">' +
+        '<button class="wp-go-btn"  data-wp="' + safe + '">Go</button>' +
+        '<button class="wp-del-btn" data-wp="' + safe + '">Delete</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+  wpListEl.querySelectorAll('.wp-go-btn').forEach(b =>
+    b.addEventListener('click', () => wpGo(b.dataset.wp)));
+  wpListEl.querySelectorAll('.wp-del-btn').forEach(b =>
+    b.addEventListener('click', () => wpDelete(b.dataset.wp)));
+}
+
+async function wpSet() {
+  const name = (wpNameInput.value || '').trim().toLowerCase();
+  if (!/^[a-z0-9_-]{1,32}$/.test(name)) {
+    wpShowError({ error: { title: 'Invalid Name', message: 'Name must be 1-32 chars: a-z, 0-9, _ or -.' } });
+    return;
+  }
+  const { ok } = await wpFetch('/bot-api/waypoints', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  if (ok) { wpNameInput.value = ''; loadWaypoints(); }
+}
+
+async function wpGo(name) {
+  await wpFetch('/bot-api/waypoints/' + encodeURIComponent(name) + '/go', { method: 'POST' });
+}
+
+async function wpDelete(name) {
+  const { ok } = await wpFetch('/bot-api/waypoints/' + encodeURIComponent(name), { method: 'DELETE' });
+  if (ok) loadWaypoints();
+}
+
+if (wpSetBtn)     wpSetBtn.addEventListener('click', wpSet);
+if (wpRefreshBtn) wpRefreshBtn.addEventListener('click', loadWaypoints);
+if (wpNameInput)  wpNameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') wpSet(); });
+loadWaypoints();
+setInterval(loadWaypoints, 15000);
+
+
 const invOfflineMsg = document.getElementById('invOfflineMsg');
 const invContainer = document.getElementById('invContainer');
 const invItemCount = document.getElementById('invItemCount');
