@@ -46,6 +46,8 @@ class BotManager extends EventEmitter {
     this.commandCooldownMs = readPositiveInt(process.env.COMMAND_COOLDOWN_MS, 2000);
     this.commands = new Map();
     this._lastHealthEmit = 0;
+    this._survivalTasks = new Set(); // active background tasks for dashboard widget
+    this._homePosition = null;       // legacy in-memory home (DB takes priority)
     // ── Plugin system ─────────────────────────────────────────────────────────
     this.pluginLoader = new PluginLoader();
     const pluginsDir = path.join(__dirname, '..', 'plugins');

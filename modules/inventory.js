@@ -45,6 +45,37 @@ async function dropUseless(bot) {
   }
 }
 
+const MAIN_INVENTORY_SLOTS = 36; // hotbar (9) + main (27), excludes armor/offhand
+const SORT_CAPACITY_PCT    = 0.9;
+
+/** True when at least 90% of main inventory slots are occupied. */
+function isInventoryNearFull(bot) {
+  const items = bot.inventory.items();
+  return (items.length / MAIN_INVENTORY_SLOTS) >= SORT_CAPACITY_PCT;
+}
+
+/**
+ * Discard junk items to free up space when inventory is near capacity.
+ * Returns { dropped, kept, triggered } so the caller can report results.
+ */
+async function sortInventory(bot, opts) {
+  const force = opts && opts.force;
+  if (!force && !isInventoryNearFull(bot)) {
+    return { triggered: false, dropped: 0, kept: 0, reason: 'below_threshold' };
+  }
+  let dropped = 0;
+  for (const item of bot.inventory.items()) {
+    if (!USELESS_ITEMS.includes(item.name)) continue;
+    try { await bot.tossStack(item); dropped += item.count; } catch (_) {}
+  }
+  return {
+    triggered: true,
+    dropped,
+    kept: bot.inventory.items().length,
+    capacityPct: Math.round((bot.inventory.items().length / MAIN_INVENTORY_SLOTS) * 100)
+  };
+}
+
 function hasFood(bot) {
   return Boolean(findItem(bot, [
     'bread',
@@ -70,6 +101,10 @@ module.exports = {
   findItem,
   equipBestTool,
   dropUseless,
+  sortInventory,
+  isInventoryNearFull,
   hasFood,
-  USELESS_ITEMS
+  USELESS_ITEMS,
+  MAIN_INVENTORY_SLOTS,
+  SORT_CAPACITY_PCT
 };

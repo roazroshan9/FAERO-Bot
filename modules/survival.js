@@ -2,6 +2,7 @@ const { goals } = require('mineflayer-pathfinder');
 const pathfinding = require('./pathfinding');
 const inventory = require('./inventory');
 const combat = require('./combat');
+// Note: hasAnyPickaxe / ensurePickaxe are exported from this file (defined below)
 
 const FOOD_ITEMS = [
   'bread',
@@ -50,6 +51,54 @@ async function configure(bot) {
       startAt: 14,
       bannedFood: ['rotten_flesh', 'spider_eye', 'poisonous_potato', 'pufferfish']
     };
+  }
+}
+
+// ─── Auto-Craft for Broken Tools ────────────────────────────────────────────
+// During !mode mine, the survival loop can call ensurePickaxe(bot) before each
+// dig pass. It detects when the bot has no pickaxe (just broke) and tries to
+// craft a new wooden_pickaxe from any nearby crafting_table + planks/sticks.
+
+const PICKAXE_NAMES = [
+  'netherite_pickaxe', 'diamond_pickaxe', 'iron_pickaxe',
+  'stone_pickaxe', 'golden_pickaxe', 'wooden_pickaxe'
+];
+
+function _findCraftingTable(bot) {
+  const id = bot.registry && bot.registry.blocksByName.crafting_table;
+  if (!id) return null;
+  return bot.findBlock({ matching: id.id, maxDistance: 8 });
+}
+
+function hasAnyPickaxe(bot) {
+  return bot.inventory.items().some(i => PICKAXE_NAMES.includes(i.name));
+}
+
+async function ensurePickaxe(bot) {
+  if (!bot || !bot.entity) return { ok: false, reason: 'no_bot' };
+  if (hasAnyPickaxe(bot)) return { ok: true, reason: 'already_have' };
+
+  const recipeName = (() => {
+    const reg = bot.registry;
+    if (reg.itemsByName.stone_pickaxe && inventory.countItem(bot, ['cobblestone']) >= 3) return 'stone_pickaxe';
+    if (reg.itemsByName.wooden_pickaxe) return 'wooden_pickaxe';
+    return null;
+  })();
+  if (!recipeName) return { ok: false, reason: 'no_materials' };
+
+  const itemDef = bot.registry.itemsByName[recipeName];
+  const table = _findCraftingTable(bot);
+  const recipe = bot.recipesFor(itemDef.id, null, 1, table || null)[0];
+  if (!recipe) return { ok: false, reason: 'no_recipe' };
+
+  try {
+    if (table && bot.entity.position.distanceTo(table.position) > 3) {
+      await pathfinding.goToCoords(bot, table.position.x, table.position.y, table.position.z, 2);
+    }
+    await bot.craft(recipe, 1, table || null);
+    return { ok: true, reason: 'crafted', tool: recipeName };
+  } catch (err) {
+    return { ok: false, reason: 'craft_failed:' + (err && err.message ? err.message : 'unknown') };
   }
 }
 
@@ -262,6 +311,9 @@ module.exports = {
   FOOD_ITEMS,
   ANIMALS,
   ORE_PRIORITY,
+  PICKAXE_NAMES,
+  hasAnyPickaxe,
+  ensurePickaxe,
   configure,
   autoEat,
   equipArmor,

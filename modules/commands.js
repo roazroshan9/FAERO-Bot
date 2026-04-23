@@ -22,9 +22,11 @@ const survival      = require('./survival');
 const combat        = require('./combat');
 const pathfinding   = require('./pathfinding');
 const economy       = require('./economy');
-const inventoryMod  = require('./inventory');
+const inventory     = require('./inventory');
+const inventoryMod  = inventory; // legacy alias (kept for backward-compat references)
 const { STATES }    = require('../core/stateManager');
 const roles         = require('../config/roles');
+const models        = require('../lib/persistence/models');
 const Vec3          = require('vec3').Vec3;
 const { AreaScanner, SCAN_RANGE } = require('./scanner');
 const securityLog                 = require('../core/securityLog');
@@ -135,6 +137,30 @@ function setMode(ctx, mode, bot, username, state) {
       getScanner().start(bot);
       ctx.manager._modeTimer = setInterval(async () => {
         if (!bot || !bot.entity) return;
+        // ── Auto-craft a fresh pickaxe if the previous one broke ───────────
+        try {
+          const tasks = ctx.manager._survivalTasks;
+          if (!survival.hasAnyPickaxe(bot)) {
+            if (tasks) tasks.add('auto-craft pickaxe');
+            const res = await survival.ensurePickaxe(bot);
+            if (res.ok && res.reason === 'crafted') {
+              say(bot, 'Crafted a fresh ' + res.tool + ' to keep mining.');
+            }
+            if (tasks) tasks.delete('auto-craft pickaxe');
+          }
+        } catch (_) {}
+        // ── Auto-sort when inventory crosses 90% capacity ───────────────────
+        try {
+          if (inventory.isInventoryNearFull(bot)) {
+            const tasks = ctx.manager._survivalTasks;
+            if (tasks) tasks.add('auto-sort');
+            const r = await inventory.sortInventory(bot);
+            if (r.triggered && r.dropped > 0) {
+              say(bot, 'Inventory at capacity — discarded ' + r.dropped + ' junk items.');
+            }
+            if (tasks) tasks.delete('auto-sort');
+          }
+        } catch (_) {}
         try { await survival.mineIron(bot); } catch (_) {}
       }, 65000);
       break;
@@ -312,6 +338,7 @@ function parseIntent(text) {
   if (/^(bal|balance|money|wallet|cash|funds|how much)$/.test(text)) return { cmd: 'balance' };
   if (/^(inv|inventory|items|what do you have|bag|backpack)$/.test(text)) return { cmd: 'inv' };
   if (/^(dropall|drop all|empty inventory|dump inventory|clear inventory)$/.test(text)) return { cmd: 'dropall' };
+  if (/^(sort|sort inventory|cleanup|tidy|discard junk|toss junk)$/.test(text)) return { cmd: 'sort' };
   if (/^(store|store items|deposit|chest store|put away)$/.test(text)) return { cmd: 'store' };
   if (/^(retreat|flee|run away|escape|fall back|get away)$/.test(text)) return { cmd: 'retreat' };
   if (/^(sethome|set home|save home|mark home|home point)$/.test(text)) return { cmd: 'sethome' };
@@ -694,14 +721,25 @@ function handleCommand(ctx, username, message, tier) {
 
     case 'sethome': {
       const pos = bot.entity.position;
-      if (ctx.manager) ctx.manager._homePosition = { x: pos.x, y: pos.y, z: pos.z };
-      say(bot, 'Home set at ' + round1(pos.x) + ' ' + round1(pos.y) + ' ' + round1(pos.z) + '.');
+      const home = { x: pos.x, y: pos.y, z: pos.z };
+      if (ctx.manager) ctx.manager._homePosition = home;
+      // Persist to MongoDB if available; silently fall back to in-memory.
+      models.upsertLocation({ owner: username, label: 'home', x: home.x, y: home.y, z: home.z })
+        .then((ok) => {
+          if (ok) say(bot, 'Home set at ' + round1(pos.x) + ' ' + round1(pos.y) + ' ' + round1(pos.z) + ' (saved to DB).');
+          else    say(bot, 'Home set at ' + round1(pos.x) + ' ' + round1(pos.y) + ' ' + round1(pos.z) + ' (Local-Only Mode).');
+        })
+        .catch(() => say(bot, 'Home set at ' + round1(pos.x) + ' ' + round1(pos.y) + ' ' + round1(pos.z) + '.'));
       return true;
     }
 
     case 'home':
       return commandTask('Go Home', async () => {
-        const home = ctx.manager && ctx.manager._homePosition;
+        // Prefer persisted location; fall back to in-memory home.
+        let home = await models.findLocation(username, 'home');
+        if (!home && ctx.manager && ctx.manager._homePosition) {
+          home = ctx.manager._homePosition;
+        }
         if (!home) {
           say(bot, 'No home set — use !sethome first.');
           return;
@@ -840,6 +878,17 @@ function handleCommand(ctx, username, message, tier) {
         say(bot, 'Equipped ' + stack.displayName + ' to main hand.');
       });
     }
+
+    case 'sort':
+      return commandTask('Sort Inventory', async () => {
+        const before = bot.inventory.items().length;
+        const r = await inventory.sortInventory(bot, { force: true });
+        if (r.dropped === 0) {
+          say(bot, 'Nothing to sort — no junk items detected (' + before + '/' + inventory.MAIN_INVENTORY_SLOTS + ' slots).');
+        } else {
+          say(bot, 'Sorted: discarded ' + r.dropped + ' junk items. Now at ' + r.kept + '/' + inventory.MAIN_INVENTORY_SLOTS + ' slots (' + r.capacityPct + '%).');
+        }
+      });
 
     case 'dropall':
       return commandTask('Drop All', async () => {

@@ -137,6 +137,37 @@ class DiscordBridge {
     ch.send('⚠️ **FAERO ALERT:** ' + message).catch(() => {});
   }
 
+  // ── EMERGENCY alert (red embed + owner mention) ───────────────────────────
+  // Triggered by core/emergencyMonitor for low HP, combat, or disconnect.
+  sendEmergencyAlert(payload) {
+    if (!this.client || !this.client.isReady() || !this.logChannelId) return;
+    const ch = this.client.channels.cache.get(this.logChannelId);
+    if (!ch || !ch.isTextBased()) return;
+    const ownerId = roles.getConfig().ownerDiscordId;
+    const mention = ownerId ? '<@' + ownerId + '>' : '@here';
+    const reason = String(payload && payload.reason || 'unknown').toUpperCase();
+    const message = String(payload && payload.message || 'Critical event');
+    const meta = payload && payload.meta || {};
+
+    const embed = new EmbedBuilder()
+      .setColor(0xFF1F1F)
+      .setTitle('🚨 [ EMERGENCY ALERT ] — ' + reason)
+      .setDescription('**' + message + '**')
+      .addFields(
+        { name: 'Bot Identity', value: '`' + (this.botManager.bot && this.botManager.bot.username || '—') + '`', inline: true },
+        { name: 'Severity',     value: '`CRITICAL`', inline: true },
+        { name: 'Trigger',      value: '`' + reason + '`', inline: true }
+      );
+    if (meta && Object.keys(meta).length > 0) {
+      const lines = Object.entries(meta).slice(0, 6).map(([k, v]) => '• `' + k + '`: ' + String(v));
+      embed.addFields({ name: 'Context', value: lines.join('\n').slice(0, 1024), inline: false });
+    }
+    embed.setFooter({ text: 'FAERO Emergency System • Connection Health Watchdog' })
+      .setTimestamp(new Date());
+
+    ch.send({ content: mention + ' ⚠️ Immediate attention required.', embeds: [embed], allowedMentions: { users: ownerId ? [ownerId] : [], parse: ownerId ? [] : ['everyone'] } }).catch(() => {});
+  }
+
   // ── Log forwarding ────────────────────────────────────────────────────────
 
   _forwardLog(entry) {
@@ -676,9 +707,20 @@ class DiscordBridge {
 
     const queue = s.queue || { currentTask: null, pending: [] };
     const currentTask = queue.currentTask
-      ? '`▶ ' + (queue.currentTask.name || 'task') + '`'
+      ? '`▶ ' + (queue.currentTask.name || queue.currentTask) + '`'
       : '`▷ idle`';
     const pendingCount = (queue.pending || []).length;
+
+    // Survival background tasks (auto-eat / auto-craft / auto-sort)
+    const survivalTasks = (bm._survivalTasks instanceof Set ? Array.from(bm._survivalTasks) : []);
+    const survivalLine = survivalTasks.length
+      ? '`' + survivalTasks.slice(0, 4).map(t => '◦ ' + t).join('  ') + '`'
+      : '`◦ none active`';
+
+    // Emergency severity from connection-health watchdog
+    const sev = this._emergency ? this._emergency.getSeverity() : 'normal';
+    const sevSym = sev === 'critical' ? '🔴' : sev === 'warning' ? '🟠' : '🟢';
+    const healthLine = '`' + sevSym + ' ' + sev.toUpperCase() + '`';
 
     const stateName = s.state ? String(s.state.state || 'idle').toUpperCase() : 'IDLE';
     const stateLine = '`' + stateName + '`' + (s.state && s.state.reason ? ' · ' + s.state.reason : '');
@@ -710,7 +752,9 @@ class DiscordBridge {
 
         { name: '📡 Live Network',      value: networkLine, inline: true },
         { name: '⚙ Task Queue',         value: currentTask + '  ·  `' + pendingCount + ' queued`', inline: true },
-        { name: '\u200b',               value: '\u200b',    inline: true },
+        { name: '🛡 Conn. Health',      value: healthLine,  inline: true },
+
+        { name: '🍞 Survival Tasks',    value: survivalLine, inline: false },
 
         { name: '\u200b', value: updatedFmt, inline: false }
       )

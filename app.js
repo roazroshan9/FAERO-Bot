@@ -11,11 +11,18 @@
 
 'use strict';
 
-const botManager     = require('./core/botManager');
-const ProcessManager = require('./core/processManager');
+// Load .env file if present (no-op when missing). Replit Secrets always win.
+try { require('dotenv').config(); } catch (_) { /* dotenv optional */ }
+
+const botManager      = require('./core/botManager');
+const ProcessManager  = require('./core/processManager');
 const ResourceMonitor = require('./core/monitor');
+const EmergencyMonitor = require('./core/emergencyMonitor');
 const { createWebServer } = require('./web/server');
-const DiscordBridge  = require('./discord/client');
+const DiscordBridge   = require('./discord/client');
+const mongo           = require('./lib/persistence/mongo');
+const models          = require('./lib/persistence/models');
+const roles           = require('./config/roles');
 
 const port = Number(process.env.WEB_PORT || process.env.PORT || 3000);
 const web  = createWebServer({ botManager });
@@ -26,19 +33,38 @@ const processManager = new ProcessManager({
   closeWeb: (done) => web.close(done)
 });
 
-// Discord bridge and resource monitor
-const discordBridge = new DiscordBridge(botManager);
-const monitor       = new ResourceMonitor(botManager);
+const discordBridge   = new DiscordBridge(botManager);
+const monitor         = new ResourceMonitor(botManager);
+const emergency       = new EmergencyMonitor(botManager);
 
-// Give the bridge a reference so !bot resources works and alerts are routed
-discordBridge._monitor = monitor;
+discordBridge._monitor   = monitor;
+discordBridge._emergency = emergency;
+botManager._emergency    = emergency;
+
 monitor.on('alert', (msg) => discordBridge.sendAlert(msg));
+emergency.on('alert', (payload) => {
+  discordBridge.sendEmergencyAlert(payload);
+  models.writeLog({
+    type: 'alert', level: 'critical', actor: 'emergency-monitor',
+    message: payload.message, meta: { reason: payload.reason, ...payload.meta }
+  }).catch(() => {});
+});
 
-// Start all subsystems
+// ── Persistence bootstrap (non-blocking) ─────────────────────────────────────
+mongo.connect((line) => botManager.log(line)).then((ok) => {
+  if (ok) {
+    models.syncRoleSnapshot(roles.getConfig()).catch(() => {});
+    botManager.log('[mongo] Persistence layer ready — UserRoles / SavedLocations / Logs available');
+  } else {
+    botManager.log('[mongo] Local-Only Mode active — bot remains fully functional without DB');
+  }
+});
+
 processManager.start();
 botManager.startAutoCleanup();
 discordBridge.start();
 monitor.start();
+emergency.start();
 
 web.listen(port).then(() => {
   botManager.log('Web control panel running on port ' + port);
@@ -54,7 +80,9 @@ process.on('SIGINT',  shutdown);
 process.on('SIGTERM', shutdown);
 
 function shutdown() {
+  emergency.stop();
   monitor.stop();
   discordBridge.stop();
+  mongo.disconnect().catch(() => {});
   processManager.shutdown(() => process.exit(0));
 }

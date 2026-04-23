@@ -11,8 +11,11 @@ A standalone CommonJS JavaScript AI Minecraft bot (FAERO) has been added at the 
 - **Plugin system**: `core/pluginLoader.js` — auto-discovers `plugins/*.plugin.js`
 - **Built-in plugins**: `plugins/ai.plugin.js`, `plugins/combat.plugin.js`, `plugins/navigation.plugin.js`
 - **Self-monitoring**: `core/monitor.js` tracks heap MB + CPU % and auto-disconnects on SAFE_HEAP_MB breach
+- **Emergency monitor**: `core/emergencyMonitor.js` — fires red Discord embed (with `@OWNER` mention) on health<15%, combat damage, or unexpected disconnect; per-reason cooldown prevents spam
+- **Persistence**: `lib/persistence/mongo.js` + `lib/persistence/models.js` — Mongoose schemas for `UserRoles`, `SavedLocations`, `Logs`. Reads `MONGODB_URI` from `.env` / Replit Secrets; **falls back to Local-Only Mode automatically** when the URI is missing or unreachable
+- **Survival automation**: `modules/survival.js` provides `ensurePickaxe()` (auto-craft on tool break inside `!mode mine`) and `mineflayer-auto-eat` config; `modules/inventory.js` exports `sortInventory()` (called by `!sort` and the mine-mode loop at ≥90% capacity)
 - **Rate limiting**: per-user + global sliding-window bucket in `discord/client.js`
-- **RBAC**: `config/roles.js` — OWNER / MOD / NONE tiers for Discord and in-game commands
+- **RBAC**: `config/roles.js` — OWNER / ADMIN / MANAGER / NONE tiers for Discord and in-game commands; `!sort` is MANAGER-tier
 
 ## Stack
 

@@ -124,6 +124,7 @@ const MC_PERMISSIONS = Object.freeze({
   // Inventory (Admin+)
   dropall:        TIERS.ADMIN,
   store:          TIERS.ADMIN,
+  sort:           TIERS.MANAGER,
   // Building
   build:          TIERS.ADMIN,
   // Debug (Admin+)
