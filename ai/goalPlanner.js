@@ -7,15 +7,17 @@
  * executes them sequentially.  The LLM returns a JSON step array; each step
  * maps to one ACTION_HANDLER.
  *
- * Bug-fixes vs original:
- *   • craft — now finds a nearby crafting table (required for 3x3 recipes)
- *   • smelt — new action: put items in a nearby furnace and wait for output
+ * Self-learning integration:
+ *   • Before planning, checks failure patterns for the goal text and injects
+ *     a warning into the LLM system prompt so it avoids known-bad steps.
+ *   • After each step fails, logs the failure to the pattern store.
  *
  * New exports: getGoalStatus() — snapshot for dashboard / REST endpoint
  */
 
 const llm            = require('./llmClient');
 const contextBuilder = require('./contextBuilder');
+const selfLearning   = require('./selfLearning');
 const survival       = require('../modules/survival');
 const pathfinding    = require('../modules/pathfinding');
 const combatAI       = require('../modules/combatAI');
@@ -66,7 +68,11 @@ const ACTION_HANDLERS = {
     const name = String(params.mob || params.name || '').toLowerCase().replace(/\s+/g, '_');
     if (!name) throw new Error('attack_mob: no mob name');
     ctx.stateManager && ctx.stateManager.setState(STATES.FIGHTING, 'llm:attack_mob');
-    const result = await combatAI.engageMobByName(bot, name, {});
+    const result = await combatAI.engageMobByName(bot, name, {
+      onEngage: (mobName) => {
+        if (ctx.manager) ctx.manager._lastCombatTarget = mobName;
+      }
+    });
     return 'Combat result: ' + result.result + (result.looted ? ' (looted)' : '');
   },
 
@@ -221,7 +227,7 @@ const ACTION_HANDLERS = {
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 
-const PLANNER_SYSTEM = `You are FAERO's goal planner. Given a free-text goal and bot state, return ONLY a JSON array of steps.
+const PLANNER_SYSTEM_BASE = `You are FAERO's goal planner. Given a free-text goal and bot state, return ONLY a JSON array of steps.
 
 Available actions:
 - mine_block:       {action:"mine_block",      params:{block:"iron_ore",    amount:16},    description:"mine 16 iron ore"}
@@ -288,10 +294,23 @@ function emitGoalUpdate(ctx, runningStepIdx) {
 
 // ── Plan generation ───────────────────────────────────────────────────────────
 
+/**
+ * Build the system prompt, appending a self-learning warning block when
+ * previous failures for this goal text are on record.
+ */
+function buildSystemPrompt(goalText) {
+  const patterns = selfLearning.checkPattern(goalText);
+  const warning  = selfLearning.formatPatternWarning(patterns);
+  if (!warning) return PLANNER_SYSTEM_BASE;
+  return PLANNER_SYSTEM_BASE +
+    '\n\nPREVIOUS FAILURE HISTORY for this goal (avoid repeating these mistakes):\n' +
+    warning;
+}
+
 async function generatePlan(ctx, goalText, snapshot) {
   const stateStr = contextBuilder.stringify(ctx, snapshot, goalText);
   const messages = [
-    { role: 'system', content: PLANNER_SYSTEM },
+    { role: 'system', content: buildSystemPrompt(goalText) },
     { role: 'user',   content: 'Bot state: ' + stateStr + '\n\nGoal: ' + goalText }
   ];
   const raw  = await llm.complete(messages, { maxTokens: 500, timeoutMs: 15000 });
@@ -369,6 +388,17 @@ function planAndExecute(ctx, sayFn) {
             try {
               const result = await handler(bot, step.params || {}, ctx);
               if (ctx.manager) ctx.manager.log('[goal] ✓ ' + label + (result ? ' — ' + result : ''));
+            } catch (stepErr) {
+              // Self-learning: persist the failure so future plans avoid it
+              try {
+                selfLearning.logGoalFailure({
+                  goalText:   _activeGoal ? _activeGoal.text : '',
+                  stepAction: step.action,
+                  errorMsg:   stepErr && stepErr.message ? stepErr.message : String(stepErr)
+                });
+              } catch (_) {}
+              if (ctx.manager) ctx.manager.log('[goal] ✗ ' + label + ' — ' + (stepErr.message || stepErr));
+              throw stepErr;
             } finally {
               if (_activeGoal) _activeGoal.stepIndex++;
               emitGoalUpdate(ctx, null);

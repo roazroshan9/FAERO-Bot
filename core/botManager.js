@@ -17,7 +17,9 @@ const survival     = require('../modules/survival');
 const commands     = require('../modules/commands');
 const combat       = require('../modules/combat');
 const { attachAutoAuth } = require('../modules/autoAuth');
-const { KeepAlive } = require('./keepAlive');
+const { KeepAlive }     = require('./keepAlive');
+const selfLearning      = require('../ai/selfLearning');
+const { FarmScheduler } = require('../modules/farming');
 
 class BotManager extends EventEmitter {
   constructor() {
@@ -52,6 +54,11 @@ class BotManager extends EventEmitter {
     this._homePosition = null;       // legacy in-memory home (DB takes priority)
     this._pendingDeathRecovery = null; // { x, y, z, at, mongoId } — set on death, cleared on respawn
     this._lastCombatTarget = null;    // last mob name engaged (used as death cause)
+    this._farmScheduler = new FarmScheduler({
+      cycleMs:  Number(process.env.FARM_CYCLE_MS) || 10 * 60 * 1000,
+      onLog:    (msg) => this.log(msg),
+      onResult: (r)   => this.emit('farmCycle', r)
+    });
     // ── Plugin system ─────────────────────────────────────────────────────────
     this.pluginLoader = new PluginLoader();
     const pluginsDir = path.join(__dirname, '..', 'plugins');
@@ -153,6 +160,13 @@ class BotManager extends EventEmitter {
       this.attachInventoryEvents(bot);
       this.keepAlive.attach(bot);
       this.log('[keepalive] watchdog attached');
+
+      // ── Auto-farm scheduler (opt-in via AUTO_FARM=true env var) ─────────────
+      if (String(process.env.AUTO_FARM || '').toLowerCase() === 'true') {
+        this._farmScheduler.updateBot(bot);
+        this._farmScheduler.start(bot);
+      }
+
       this.emit('bot', this.getStatus());
       this.emit('inventory', this.getInventory());
     });
@@ -184,14 +198,26 @@ class BotManager extends EventEmitter {
     });
 
     bot.on('death', () => {
-      const pos = bot.entity && bot.entity.position;
+      const pos  = bot.entity && bot.entity.position;
       const loc  = pos ? { x: pos.x, y: pos.y, z: pos.z } : null;
+      const cause = this._lastCombatTarget || 'unknown';
       this.log('Bot died' + (loc
         ? ' at X' + Math.round(loc.x) + ' Y' + Math.round(loc.y) + ' Z' + Math.round(loc.z)
-        : ''));
+        : '') + ' — cause: ' + cause);
       combat.stopCombat(bot);
       this.taskQueue.clear();
       this.stateManager.reset('death');
+
+      // ── Self-learning: write death to local JSON log ───────────────────────
+      if (loc) {
+        try {
+          selfLearning.logDeath({
+            botName: bot.username || 'faero',
+            cause,
+            x: loc.x, y: loc.y, z: loc.z
+          });
+        } catch (_) {}
+      }
 
       if (loc) {
         this._pendingDeathRecovery = { x: loc.x, y: loc.y, z: loc.z, at: Date.now() };
@@ -199,7 +225,7 @@ class BotManager extends EventEmitter {
         models.logDeath({
           botName: bot.username || 'faero',
           x: loc.x, y: loc.y, z: loc.z,
-          cause: this._lastCombatTarget || 'unknown'
+          cause
         }).then(id => {
           if (this._pendingDeathRecovery) this._pendingDeathRecovery.mongoId = id;
         }).catch(() => {});
@@ -254,6 +280,7 @@ class BotManager extends EventEmitter {
       this._stopDangerWatch();
       this.stopBrain();
       try { this.keepAlive.detach(); } catch (_) {}
+      try { this._farmScheduler.stop(); } catch (_) {}
       this.bot = null;
       this.emit('bot', this.getStatus());
       if (this.shouldReconnect) {
