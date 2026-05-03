@@ -3,25 +3,23 @@
 /**
  * FAERO — LLM Client (ai/llmClient.js)
  *
- * Unified API client for Groq (primary) and DeepSeek (fallback).
- * Uses Node 20 native fetch — no extra dependencies.
+ * Primary:  Groq  via the official groq-sdk   (GROQ_API_KEY)
+ * Fallback: DeepSeek via native fetch          (DEEPSEEK_API_KEY)
  *
  * Environment variables:
- *   GROQ_API_KEY      — Groq cloud API key (get free at console.groq.com)
+ *   GROQ_API_KEY      — Groq cloud API key (console.groq.com — free tier available)
  *   GROQ_MODEL        — default: llama-3.3-70b-versatile
  *   DEEPSEEK_API_KEY  — DeepSeek API key (fallback)
  *   DEEPSEEK_MODEL    — default: deepseek-chat
- *   LLM_TIMEOUT_MS    — per-request timeout, default 12000
+ *   LLM_TIMEOUT_MS    — per-request timeout ms, default 12000
  *   LLM_MAX_TOKENS    — max response tokens, default 512
  */
-
-const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions';
-const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 
 const DEFAULT_GROQ_MODEL     = 'llama-3.3-70b-versatile';
 const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat';
 const DEFAULT_TIMEOUT_MS     = 12000;
 const DEFAULT_MAX_TOKENS     = 512;
+const DEEPSEEK_URL           = 'https://api.deepseek.com/chat/completions';
 
 // ── Rate limiter — simple token bucket (per provider) ─────────────────────────
 const _buckets = {};
@@ -31,8 +29,7 @@ function getBucket(provider) {
     _buckets[provider] = { tokens: 25, lastRefill: Date.now() };
   }
   const b = _buckets[provider];
-  const elapsed = Date.now() - b.lastRefill;
-  if (elapsed >= 60000) {
+  if (Date.now() - b.lastRefill >= 60000) {
     b.tokens = 25;
     b.lastRefill = Date.now();
   }
@@ -46,14 +43,36 @@ function consumeToken(provider) {
   return true;
 }
 
-// ── Core HTTP call ─────────────────────────────────────────────────────────────
-async function callAPI(url, apiKey, model, messages, maxTokens, timeoutMs) {
+// ── Groq SDK call ──────────────────────────────────────────────────────────────
+async function callGroq(apiKey, model, messages, maxTokens, timeoutMs) {
+  const Groq = require('groq-sdk');
+  const client = new Groq({ apiKey, timeout: timeoutMs });
+
+  const completion = await client.chat.completions.create({
+    model,
+    messages,
+    max_tokens:  maxTokens,
+    temperature: 0.4
+  });
+
+  const content = completion &&
+    completion.choices &&
+    completion.choices[0] &&
+    completion.choices[0].message &&
+    completion.choices[0].message.content;
+
+  if (!content) throw new Error('Groq returned empty content');
+  return content.trim();
+}
+
+// ── DeepSeek fallback — native fetch ──────────────────────────────────────────
+async function callDeepSeek(apiKey, model, messages, maxTokens, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url, {
-      method: 'POST',
+    const res = await fetch(DEEPSEEK_URL, {
+      method:  'POST',
       headers: {
         'Content-Type':  'application/json',
         'Authorization': 'Bearer ' + apiKey
@@ -69,17 +88,17 @@ async function callAPI(url, apiKey, model, messages, maxTokens, timeoutMs) {
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new Error('LLM API ' + res.status + ': ' + body.slice(0, 120));
+      throw new Error('DeepSeek API ' + res.status + ': ' + body.slice(0, 120));
     }
 
-    const data = await res.json();
+    const data    = await res.json();
     const content = data &&
       data.choices &&
       data.choices[0] &&
       data.choices[0].message &&
       data.choices[0].message.content;
 
-    if (!content) throw new Error('LLM returned empty content');
+    if (!content) throw new Error('DeepSeek returned empty content');
     return content.trim();
   } finally {
     clearTimeout(timer);
@@ -89,7 +108,8 @@ async function callAPI(url, apiKey, model, messages, maxTokens, timeoutMs) {
 // ── Public: chat completion ────────────────────────────────────────────────────
 /**
  * Send a messages array to the configured LLM provider.
- * Tries Groq first, falls back to DeepSeek if Groq key is absent or fails.
+ * Tries Groq (SDK) first, falls back to DeepSeek (native fetch) if Groq is
+ * absent or fails.
  *
  * @param {Array<{role:'system'|'user'|'assistant', content:string}>} messages
  * @param {object} [opts]
@@ -108,42 +128,38 @@ async function complete(messages, opts) {
     throw new Error('No LLM API key configured. Set GROQ_API_KEY or DEEPSEEK_API_KEY in secrets.');
   }
 
-  // ── Groq (primary) ─────────────────────────────────────────────────────────
+  // ── Groq SDK (primary) ─────────────────────────────────────────────────────
   if (groqKey) {
     if (!consumeToken('groq')) throw new Error('LLM rate limit reached — try again in a moment.');
     const model = process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
     try {
-      return await callAPI(GROQ_URL, groqKey, model, messages, maxTokens, timeoutMs);
+      return await callGroq(groqKey, model, messages, maxTokens, timeoutMs);
     } catch (err) {
       if (!deepseekKey) throw err;
-      // Fall through to DeepSeek
+      // Fall through to DeepSeek fallback
     }
   }
 
-  // ── DeepSeek (fallback) ────────────────────────────────────────────────────
+  // ── DeepSeek fallback ──────────────────────────────────────────────────────
   if (!consumeToken('deepseek')) throw new Error('LLM rate limit reached — try again in a moment.');
   const model = process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL;
-  return await callAPI(DEEPSEEK_URL, deepseekKey, model, messages, maxTokens, timeoutMs);
+  return await callDeepSeek(deepseekKey, model, messages, maxTokens, timeoutMs);
 }
 
 /**
  * Extract a JSON object/array embedded in raw LLM text.
- * Many models wrap JSON in markdown code fences — this strips them.
+ * Strips markdown code fences that models often wrap JSON in.
  */
 function extractJSON(text) {
   if (!text) return null;
   let s = text.trim();
-  // Strip ```json ... ``` or ``` ... ```
   s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
-  // Find first { or [
   const start = s.search(/[\[{]/);
   if (start === -1) return null;
   s = s.slice(start);
-  // Find matching close
   const open  = s[0];
   const close = open === '[' ? ']' : '}';
-  let depth = 0;
-  let end   = -1;
+  let depth = 0, end = -1;
   for (let i = 0; i < s.length; i++) {
     if (s[i] === open)  depth++;
     if (s[i] === close) { depth--; if (depth === 0) { end = i; break; } }
