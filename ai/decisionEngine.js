@@ -1,6 +1,7 @@
-const survival = require('../modules/survival');
-const combat = require('../modules/combat');
-const economy = require('../modules/economy');
+const survival  = require('../modules/survival');
+const combat    = require('../modules/combat');
+const combatAI  = require('../modules/combatAI');
+const economy   = require('../modules/economy');
 const inventory = require('../modules/inventory');
 const { STATES } = require('../core/stateManager');
 
@@ -132,9 +133,18 @@ async function act(ctx, decision) {
       ctx.stateManager.setState(STATES.FIGHTING, decision.reason);
       // Re-fetch live entity at execution time — avoids holding stale GC root across queue delay
       const liveEntity = cachedTargetId ? bot.entities[cachedTargetId] : null;
-      await combat.attackMob(bot, liveEntity || decision.reason);
+      if (!liveEntity) {
+        // Entity already gone — fall back to name scan
+        const found = bot.nearestEntity(e => e.name === decision.reason && e.type === 'mob');
+        if (found) await combatAI.engageMob(bot, found, {});
+      } else {
+        const result = await combatAI.engageMob(bot, liveEntity, {});
+        if (ctx.manager) ctx.manager.log(
+          '[combatAI] ' + decision.reason + ' → ' + result.result +
+          (result.looted ? ' (drops collected)' : '')
+        );
+      }
       ctx.memory.setLastAction('fought mob ' + decision.reason);
-      if (ctx.manager) ctx.manager.log('AI combat action: ' + decision.reason);
       ctx.stateManager.reset('danger_handled');
     }, { priority: 80 });
     return;

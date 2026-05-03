@@ -20,6 +20,7 @@
 
 const survival      = require('./survival');
 const combat        = require('./combat');
+const combatAI      = require('./combatAI');
 const pathfinding   = require('./pathfinding');
 const economy       = require('./economy');
 const inventory     = require('./inventory');
@@ -173,23 +174,35 @@ function startGuardianMode(ctx, username, bot) {
   stopGuardianMode(ctx);
   ctx.manager._guardianActive   = true;
   ctx.manager._guardianUsername = username;
+  ctx.manager._guardianEngaging = false;
 
   ctx.manager._guardianTimer = setInterval(() => {
     if (!ctx.manager._guardianActive) return;
     if (!bot || !bot.entity) return;
+    if (ctx.manager._guardianEngaging) return; // Don't overlap active fights
+
     const player = bot.players[username];
     if (!player || !player.entity) return;
 
     const hostile = bot.nearestEntity((entity) => {
       if (!combat.isHostileMob(entity)) return false;
-      return entity.position.distanceTo(player.entity.position) <= 10;
+      return entity.position.distanceTo(player.entity.position) <= 12;
     });
     if (!hostile) return;
 
-    try {
-      if (bot.pvp && bot.pvp.attack) bot.pvp.attack(hostile);
-      else bot.attack(hostile);
-    } catch (_) {}
+    ctx.manager._guardianEngaging = true;
+    combatAI.engageMob(bot, hostile, { retreatHealth: 8 })
+      .then((result) => {
+        if (!ctx.manager._guardianActive) return;
+        if (result.result === 'killed') {
+          const msg = 'Eliminated ' + hostile.name + (result.looted ? ' — drops collected.' : '.');
+          say(bot, msg);
+        } else if (result.result === 'retreated') {
+          say(bot, 'Retreated from ' + hostile.name + ' — health too low.');
+        }
+      })
+      .catch(() => {})
+      .finally(() => { ctx.manager._guardianEngaging = false; });
   }, 1500);
 }
 
@@ -790,7 +803,7 @@ function handleCommand(ctx, username, message, tier) {
       return commandTask('Guardian', async () => {
         startGuardianMode(ctx, username, bot);
         state.setState(STATES.GUARDING, username);
-        say(bot, 'Guardian Mode ACTIVE — scanning 10-block radius around you.');
+        say(bot, 'Guardian Mode ACTIVE — engaging threats within 12 blocks of you. Retreat threshold: ' + combatAI.RETREAT_HEALTH + ' HP.');
       });
 
     case 'attack': {
@@ -816,17 +829,22 @@ function handleCommand(ctx, username, message, tier) {
           e.name &&
           e.name.toLowerCase().includes(mobName.toLowerCase()) &&
           e.type === 'mob' &&
-          bot.entity.position.distanceTo(e.position) <= 32
+          bot.entity.position.distanceTo(e.position) <= combatAI.MAX_CHASE_DISTANCE
         );
         if (!mob) {
-          say(bot, 'No ' + mobName + ' found within 32 blocks.');
+          say(bot, 'No ' + mobName + ' found within ' + combatAI.MAX_CHASE_DISTANCE + ' blocks.');
           return;
         }
         state.setState(STATES.FIGHTING, mob.name);
         const dist = Math.round(bot.entity.position.distanceTo(mob.position));
-        say(bot, 'Targeting ' + mob.name + ' at ' + dist + ' blocks.');
-        await combat.attackMob(bot, mob);
-        say(bot, 'Combat with ' + mob.name + ' concluded.');
+        say(bot, 'Engaging ' + mob.name + ' at ' + dist + ' blocks — retreat threshold: ' + combatAI.RETREAT_HEALTH + ' HP.');
+        const result = await combatAI.engageMob(bot, mob, {});
+        const summary = result.result === 'killed'
+          ? 'Eliminated ' + mob.name + (result.looted ? ' — drops collected.' : '.')
+          : result.result === 'retreated'
+            ? 'Retreated from ' + mob.name + ' (health too low to re-engage).'
+            : 'Lost track of ' + mob.name + '.';
+        say(bot, summary);
       });
     }
 

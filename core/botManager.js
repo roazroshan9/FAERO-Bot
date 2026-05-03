@@ -264,7 +264,7 @@ class BotManager extends EventEmitter {
       this.log('[pluginLoader] Combat plugin is disabled — danger watch not started');
       return;
     }
-    const DANGER_RANGE = readPositiveInt(process.env.DANGER_WATCH_RANGE, 5);
+    const DANGER_RANGE = readPositiveInt(process.env.DANGER_WATCH_RANGE, 16);
     const POLL_MS = 2000;
     this._dangerWatchTimer = setInterval(() => {
       if (!bot.entity) return;
