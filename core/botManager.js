@@ -16,6 +16,7 @@ const Brain        = require('../ai/brain');
 const survival     = require('../modules/survival');
 const commands     = require('../modules/commands');
 const combat       = require('../modules/combat');
+const { attachAutoAuth } = require('../modules/autoAuth');
 const { KeepAlive } = require('./keepAlive');
 
 class BotManager extends EventEmitter {
@@ -137,16 +138,12 @@ class BotManager extends EventEmitter {
   }
 
   bindBotEvents(bot) {
+    // ── Reactive auto-auth (must be attached before spawn so pre-spawn ────
+    // ── prompts from the server are caught immediately) ───────────────────
+    attachAutoAuth(bot, process.env.MC_PASSWORD || '', (msg) => this.log(msg));
+
     bot.once('spawn', async () => {
       this.log('Spawned in world');
-
-      if (process.env.MC_PASSWORD) {
-        await new Promise(r => setTimeout(r, 2000));
-        if (bot && bot.entity) {
-          bot.chat('/login ' + process.env.MC_PASSWORD);
-          this.log('Auto-login command sent');
-        }
-      }
 
       await survival.configure(bot);
       this.stateManager.reset('spawned');
