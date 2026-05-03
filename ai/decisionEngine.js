@@ -131,6 +131,7 @@ async function act(ctx, decision) {
     const cachedTargetId = decision.target && decision.target.id;
     ctx.taskQueue.push('danger: ' + decision.reason, async () => {
       ctx.stateManager.setState(STATES.FIGHTING, decision.reason);
+      if (ctx.manager) ctx.manager._lastCombatTarget = decision.reason;
       // Re-fetch live entity at execution time — avoids holding stale GC root across queue delay
       const liveEntity = cachedTargetId ? bot.entities[cachedTargetId] : null;
       if (!liveEntity) {

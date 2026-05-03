@@ -1793,3 +1793,12 @@ pre {
 .waypoints-panel .wp-error{margin-top:.6rem;padding:.6rem .8rem;border-left:3px solid #FF1F1F;background:rgba(255,31,31,.10);border-radius:6px;color:#ffe4e4}
 .waypoints-panel .wp-error-title{font-weight:700;letter-spacing:.04em;color:#ff7a7a;font-size:.85rem}
 .waypoints-panel .wp-error-msg{margin-top:2px;font-size:.82rem;color:#ffd6d6}
+.pulse-dot.red{width:8px;height:8px;border-radius:50%;background:#ff4444;box-shadow:0 0 6px #ff4444;animation:pulse-dot 2s ease-in-out infinite}
+.deaths-panel .death-list{margin-top:.75rem;display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto}
+.deaths-panel .death-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:.55rem .75rem;background:rgba(42,10,10,.55);border:1px solid rgba(255,80,80,.18);border-radius:8px}
+.deaths-panel .death-row-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+.deaths-panel .death-coords{font-weight:600;color:#ffe4e4;font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.deaths-panel .death-meta{font-size:.78rem;color:#c9999a}
+.deaths-panel .death-row-status{flex-shrink:0}
+.deaths-panel .death-recovered{color:#5ddb7a;font-size:.78rem;font-weight:600;padding:.2rem .5rem;background:rgba(93,219,122,.1);border-radius:4px;border:1px solid rgba(93,219,122,.25)}
+.deaths-panel .death-pending{color:#ff8c42;font-size:.78rem;padding:.2rem .5rem;background:rgba(255,140,66,.1);border-radius:4px;border:1px solid rgba(255,140,66,.25)}

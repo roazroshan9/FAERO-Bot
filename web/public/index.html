@@ -294,6 +294,24 @@ reason: waiting</pre>
           </div>
         </div>
 
+        <div class="card wide glass-panel deaths-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">MORTALITY LOG</p>
+            <span class="pulse-dot red"></span>
+          </div>
+          <div class="wp-header-row">
+            <h2>Death Log</h2>
+            <span id="deathCount" class="wp-status">—</span>
+          </div>
+          <p class="chat-help">Death coordinates are saved to MongoDB. On respawn the bot auto-navigates back to collect dropped items.</p>
+          <div class="control-row">
+            <button id="deathRefreshBtn" class="wp-refresh-btn">Refresh</button>
+          </div>
+          <div id="deathList" class="death-list">
+            <div class="wp-empty">No deaths recorded yet.</div>
+          </div>
+        </div>
+
         <div class="card wide glass-panel diagnostics-panel">
           <div class="panel-title-row">
             <p class="eyebrow">NETWORK</p>

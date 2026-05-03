@@ -604,6 +604,54 @@ loadWaypoints();
 setInterval(loadWaypoints, 15000);
 
 
+// ── Death Log ──────────────────────────────────────────────────────────────────
+const deathListEl     = document.getElementById('deathList');
+const deathCountEl    = document.getElementById('deathCount');
+const deathRefreshBtn = document.getElementById('deathRefreshBtn');
+
+async function loadDeaths() {
+  let body = null;
+  try {
+    const r = await fetch('/bot-api/deaths');
+    if (r.ok) body = await r.json();
+  } catch (_) {}
+
+  if (!body || !body.ok) {
+    if (deathListEl) deathListEl.innerHTML = '<div class="wp-empty">Unable to load death log.</div>';
+    return;
+  }
+
+  const list = body.deaths || [];
+  if (deathCountEl) deathCountEl.textContent = body.offline ? 'offline' : list.length + ' recorded';
+
+  if (!list.length) {
+    if (deathListEl) deathListEl.innerHTML = '<div class="wp-empty">No deaths recorded yet.</div>';
+    return;
+  }
+
+  if (deathListEl) {
+    deathListEl.innerHTML = list.map(d => {
+      const ts   = new Date(d.at).toLocaleString();
+      const flag = d.recovered
+        ? '<span class="death-recovered">recovered</span>'
+        : '<span class="death-pending">pending</span>';
+      const cause = String(d.cause || 'unknown').replace(/</g, '&lt;');
+      return '<div class="death-row">' +
+        '<div class="death-row-info">' +
+          '<span class="death-coords">X ' + Math.round(d.x) + '  Y ' + Math.round(d.y) + '  Z ' + Math.round(d.z) + '</span>' +
+          '<span class="death-meta">Cause: ' + cause + ' · ' + ts + '</span>' +
+        '</div>' +
+        '<div class="death-row-status">' + flag + '</div>' +
+      '</div>';
+    }).join('');
+  }
+}
+
+if (deathRefreshBtn) deathRefreshBtn.addEventListener('click', loadDeaths);
+loadDeaths();
+setInterval(loadDeaths, 30000);
+
+
 const invOfflineMsg = document.getElementById('invOfflineMsg');
 const invContainer = document.getElementById('invContainer');
 const invItemCount = document.getElementById('invItemCount');

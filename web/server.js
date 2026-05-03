@@ -227,6 +227,20 @@ function mountRoutes(app, io, botManager) {
     }
   });
 
+  // ── Death Log (MongoDB-backed) ─────────────────────────────────────────────
+  app.get('/bot-api/deaths', async (req, res) => {
+    const deathModels = require('../lib/persistence/models');
+    const deathMongo  = require('../lib/persistence/mongo');
+    if (!deathMongo.isReady()) return res.json({ ok: true, deaths: [], offline: true });
+    const limit  = Math.min(Math.max(Number(req.query.limit) || 20, 1), 50);
+    const deaths = await deathModels.listDeaths(null, limit);
+    res.json({ ok: true, deaths: deaths.map(d => ({
+      id: String(d._id), x: d.x, y: d.y, z: d.z,
+      dimension: d.dimension, cause: d.cause,
+      recovered: d.recovered, at: d.at
+    }))});
+  });
+
   app.post('/bot-api/test-proxy', async (req, res) => {
     const { SocksClient } = require('socks');
     const proxyUrl = String((req.body && req.body.proxy) || '').trim();

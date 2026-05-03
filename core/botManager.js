@@ -48,6 +48,8 @@ class BotManager extends EventEmitter {
     this._lastHealthEmit = 0;
     this._survivalTasks = new Set(); // active background tasks for dashboard widget
     this._homePosition = null;       // legacy in-memory home (DB takes priority)
+    this._pendingDeathRecovery = null; // { x, y, z, at, mongoId } — set on death, cleared on respawn
+    this._lastCombatTarget = null;    // last mob name engaged (used as death cause)
     // ── Plugin system ─────────────────────────────────────────────────────────
     this.pluginLoader = new PluginLoader();
     const pluginsDir = path.join(__dirname, '..', 'plugins');
@@ -184,10 +186,60 @@ class BotManager extends EventEmitter {
     });
 
     bot.on('death', () => {
-      this.log('Bot died');
+      const pos = bot.entity && bot.entity.position;
+      const loc  = pos ? { x: pos.x, y: pos.y, z: pos.z } : null;
+      this.log('Bot died' + (loc
+        ? ' at X' + Math.round(loc.x) + ' Y' + Math.round(loc.y) + ' Z' + Math.round(loc.z)
+        : ''));
       combat.stopCombat(bot);
       this.taskQueue.clear();
       this.stateManager.reset('death');
+
+      if (loc) {
+        this._pendingDeathRecovery = { x: loc.x, y: loc.y, z: loc.z, at: Date.now() };
+        const models = require('../lib/persistence/models');
+        models.logDeath({
+          botName: bot.username || 'faero',
+          x: loc.x, y: loc.y, z: loc.z,
+          cause: this._lastCombatTarget || 'unknown'
+        }).then(id => {
+          if (this._pendingDeathRecovery) this._pendingDeathRecovery.mongoId = id;
+        }).catch(() => {});
+        this.emit('deathAlert', {
+          x: Math.round(loc.x), y: Math.round(loc.y), z: Math.round(loc.z),
+          at: new Date().toISOString()
+        });
+      }
+    });
+
+    bot.on('respawn', () => {
+      const recovery = this._pendingDeathRecovery;
+      if (!recovery) return;
+      this._pendingDeathRecovery = null;
+      this.log('[death-recovery] Respawned — returning to X' + Math.round(recovery.x) +
+        ' Y' + Math.round(recovery.y) + ' Z' + Math.round(recovery.z) + ' for drop collection');
+
+      // Delay before pathfinding — server needs time to load chunks after respawn
+      setTimeout(async () => {
+        if (!bot || !bot.entity) return;
+        const pathfindingMod = require('../modules/pathfinding');
+        const combatAI       = require('../modules/combatAI');
+        try {
+          this.stateManager.setState(STATES.ESCAPING, 'death_recovery');
+          await pathfindingMod.goToCoords(bot, recovery.x, recovery.y, recovery.z, 2);
+          this.log('[death-recovery] At death site — collecting drops');
+          await combatAI.collectDrops(bot, bot.entity.position);
+          this.log('[death-recovery] Complete');
+          this.stateManager.reset('death_recovery_done');
+          if (recovery.mongoId) {
+            const models = require('../lib/persistence/models');
+            models.markDeathRecovered(recovery.mongoId).catch(() => {});
+          }
+        } catch (err) {
+          this.log('[death-recovery] Navigation failed: ' + (err && err.message ? err.message : String(err)));
+          this.stateManager.reset('death_recovery_failed');
+        }
+      }, 4000);
     });
 
     bot.on('kicked', (reason) => {
