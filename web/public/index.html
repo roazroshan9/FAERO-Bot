@@ -184,6 +184,44 @@
           </div>
         </div>
 
+        <div class="card wide glass-panel ai-brain-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">AI BRAIN</p>
+            <div class="ai-provider-badge" id="aiProviderBadge" data-state="unknown">
+              <span class="ai-provider-dot" id="aiProviderDot"></span>
+              <span id="aiProviderLabel">Checking…</span>
+            </div>
+          </div>
+          <h2>LLM Goal Planner</h2>
+          <p class="chat-help">Give the bot a complex multi-step goal — it will plan and execute the steps automatically using AI.</p>
+
+          <div class="control-row ai-goal-row">
+            <input id="aiGoalInput" class="ai-goal-input" placeholder="e.g. find some iron, craft a pickaxe, come back" autocomplete="off" maxlength="200">
+            <button id="aiGoalRun" class="ai-goal-run-btn">Run Goal</button>
+            <button id="aiGoalStop" class="ai-goal-stop-btn">Stop</button>
+          </div>
+
+          <div class="ai-controls-row">
+            <button id="aiChatToggle" class="ai-chat-off">AI Chat: OFF</button>
+            <span class="chat-help ai-chat-help-text">When ON: bot responds to all messages from trusted players</span>
+          </div>
+
+          <div id="aiGoalStatus" class="ai-goal-status" style="display:none">
+            <div class="ai-goal-status-header">
+              <span id="aiGoalLabel" class="ai-goal-label"></span>
+              <span id="aiGoalStepCount" class="ai-goal-step-count"></span>
+            </div>
+            <div id="aiGoalSteps" class="ai-goal-steps-list"></div>
+          </div>
+
+          <div class="ai-chat-log-header">
+            <span class="ai-chat-log-title">AI CONVERSATION</span>
+          </div>
+          <div id="aiChatFeed" class="ai-chat-feed">
+            <div class="ai-feed-empty">No AI conversations yet — enable AI Chat and talk to the bot in Minecraft.</div>
+          </div>
+        </div>
+
         <div class="card wide glass-panel decision-panel">
           <div class="panel-title-row">
             <p class="eyebrow">AI CORE</p>

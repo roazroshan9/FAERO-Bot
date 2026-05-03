@@ -1802,3 +1802,287 @@ pre {
 .deaths-panel .death-row-status{flex-shrink:0}
 .deaths-panel .death-recovered{color:#5ddb7a;font-size:.78rem;font-weight:600;padding:.2rem .5rem;background:rgba(93,219,122,.1);border-radius:4px;border:1px solid rgba(93,219,122,.25)}
 .deaths-panel .death-pending{color:#ff8c42;font-size:.78rem;padding:.2rem .5rem;background:rgba(255,140,66,.1);border-radius:4px;border:1px solid rgba(255,140,66,.25)}
+
+/* ── AI Brain Panel ─────────────────────────────────────────────────────── */
+.ai-brain-panel .chat-help { margin-bottom: 16px; }
+
+/* Provider badge */
+.ai-provider-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid rgba(0,255,255,0.22);
+  background: rgba(0,255,255,0.06);
+  color: var(--muted);
+  transition: all 0.3s;
+}
+.ai-provider-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #555;
+  flex-shrink: 0;
+  transition: all 0.3s;
+}
+.ai-provider-badge[data-state="groq"] {
+  border-color: rgba(57,255,20,0.4);
+  background: rgba(57,255,20,0.08);
+  color: var(--green);
+}
+.ai-provider-badge[data-state="groq"] .ai-provider-dot {
+  background: var(--green);
+  box-shadow: 0 0 6px rgba(57,255,20,0.8);
+  animation: breatheGreen 2s ease-in-out infinite;
+}
+.ai-provider-badge[data-state="deepseek"] {
+  border-color: rgba(255,200,0,0.4);
+  background: rgba(255,200,0,0.08);
+  color: #ffc800;
+}
+.ai-provider-badge[data-state="deepseek"] .ai-provider-dot {
+  background: #ffc800;
+  box-shadow: 0 0 6px rgba(255,200,0,0.8);
+  animation: breatheGreen 2s ease-in-out infinite;
+}
+.ai-provider-badge[data-state="none"] {
+  border-color: rgba(255,49,95,0.4);
+  background: rgba(255,49,95,0.08);
+  color: var(--red);
+}
+.ai-provider-badge[data-state="none"] .ai-provider-dot {
+  background: var(--red);
+}
+
+/* Goal input row */
+.ai-goal-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.ai-goal-input {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+.ai-goal-run-btn {
+  background: rgba(57,255,20,0.12) !important;
+  border-color: rgba(57,255,20,0.5) !important;
+  color: var(--green) !important;
+  font-weight: 700 !important;
+}
+.ai-goal-run-btn:hover {
+  background: rgba(57,255,20,0.25) !important;
+  box-shadow: 0 0 12px rgba(57,255,20,0.3) !important;
+}
+.ai-goal-stop-btn {
+  background: rgba(255,49,95,0.12) !important;
+  border-color: rgba(255,49,95,0.4) !important;
+  color: #ff8fb0 !important;
+}
+.ai-goal-stop-btn:hover {
+  background: rgba(255,49,95,0.25) !important;
+}
+
+/* AI Chat toggle */
+.ai-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.ai-chat-help-text {
+  margin: 0 !important;
+  font-size: 11px;
+}
+.ai-chat-off {
+  background: rgba(0,255,255,0.08) !important;
+  border-color: rgba(0,255,255,0.3) !important;
+  color: var(--muted) !important;
+  font-size: 12px !important;
+  padding: 8px 16px !important;
+}
+.ai-chat-on {
+  background: rgba(0,255,255,0.18) !important;
+  border-color: rgba(0,255,255,0.6) !important;
+  color: var(--cyan) !important;
+  font-size: 12px !important;
+  padding: 8px 16px !important;
+  box-shadow: 0 0 12px rgba(0,255,255,0.25) !important;
+}
+
+/* Active goal progress */
+.ai-goal-status {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0,255,255,0.18);
+  border-radius: 14px;
+  background: rgba(0,20,26,0.55);
+}
+.ai-goal-status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.ai-goal-label {
+  font-size: 13px;
+  color: #c8f0ff;
+  font-style: italic;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-goal-step-count {
+  font-size: 11px;
+  color: var(--cyan);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+.ai-goal-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.ai-step-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  border: 1px solid transparent;
+  transition: background 0.2s;
+}
+.ai-step-icon {
+  font-size: 13px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.ai-step-desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-step-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.ai-step-done {
+  background: rgba(57,255,20,0.07);
+  border-color: rgba(57,255,20,0.15);
+  color: #78c86a;
+}
+.ai-step-done .ai-step-icon { color: var(--green); }
+.ai-step-badge-done { background: rgba(57,255,20,0.12); color: var(--green); }
+
+.ai-step-running {
+  background: rgba(0,255,255,0.1);
+  border-color: rgba(0,255,255,0.3);
+  color: var(--cyan);
+}
+.ai-step-running .ai-step-icon {
+  color: var(--cyan);
+  animation: spin 1.2s linear infinite;
+}
+.ai-step-badge-running { background: rgba(0,255,255,0.15); color: var(--cyan); }
+
+.ai-step-pending {
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.07);
+  color: var(--muted);
+}
+.ai-step-badge-pending { background: rgba(255,255,255,0.06); color: #7a9a9a; }
+
+.ai-step-planning {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  animation: breatheCyan 1.5s ease-in-out infinite;
+}
+
+/* AI Conversation feed */
+.ai-chat-log-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  margin-top: 4px;
+}
+.ai-chat-log-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--green);
+  text-shadow: 0 0 10px rgba(57,255,20,0.5);
+  text-transform: uppercase;
+}
+.ai-chat-feed {
+  min-height: 80px;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: rgba(0,10,12,0.5);
+  border: 1px solid rgba(0,255,255,0.12);
+  border-radius: 10px;
+}
+.ai-feed-empty {
+  color: #4a7a8a;
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+  padding: 12px;
+}
+.ai-feed-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ai-feed-ts {
+  color: #3a6a7a;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.ai-feed-user {
+  color: #7fd6ff;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.ai-feed-msg.ai-feed-player {
+  color: #a8d8e8;
+}
+.ai-feed-sep {
+  color: #3a6a7a;
+}
+.ai-feed-msg.ai-feed-bot {
+  color: var(--green);
+  font-weight: 600;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

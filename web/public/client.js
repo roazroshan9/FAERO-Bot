@@ -1071,6 +1071,171 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
   }
 });
 
+// ── AI Brain Panel ───────────────────────────────────────────────────────────
+(function () {
+  const goalInput     = document.getElementById('aiGoalInput');
+  const goalRunBtn    = document.getElementById('aiGoalRun');
+  const goalStopBtn   = document.getElementById('aiGoalStop');
+  const chatToggleBtn = document.getElementById('aiChatToggle');
+  const providerBadge = document.getElementById('aiProviderBadge');
+  const providerDot   = document.getElementById('aiProviderDot');
+  const providerLabel = document.getElementById('aiProviderLabel');
+  const goalStatus    = document.getElementById('aiGoalStatus');
+  const goalLabel     = document.getElementById('aiGoalLabel');
+  const goalStepCount = document.getElementById('aiGoalStepCount');
+  const goalStepsList = document.getElementById('aiGoalSteps');
+  const chatFeed      = document.getElementById('aiChatFeed');
+
+  let _aiChatEnabled = false;
+  const MAX_FEED_LINES = 40;
+
+  // ── Provider badge ────────────────────────────────────────────────────────
+  function renderProvider(info) {
+    if (!info) { providerBadge.dataset.state = 'unknown'; providerLabel.textContent = 'Checking…'; return; }
+    if (!info.available) {
+      providerBadge.dataset.state = 'none';
+      providerLabel.textContent   = 'No API Key';
+      return;
+    }
+    providerBadge.dataset.state = info.provider;
+    providerLabel.textContent   = info.provider.toUpperCase() + ' · ' + (info.model || '');
+  }
+
+  // ── AI Chat toggle display ────────────────────────────────────────────────
+  function setAiChatDisplay(enabled) {
+    _aiChatEnabled = enabled;
+    chatToggleBtn.textContent = 'AI Chat: ' + (enabled ? 'ON' : 'OFF');
+    chatToggleBtn.className   = enabled ? 'ai-chat-on' : 'ai-chat-off';
+  }
+
+  chatToggleBtn.addEventListener('click', () => {
+    const next = !_aiChatEnabled;
+    socket.emit('set_ai_chat', { enabled: next });
+    setAiChatDisplay(next);
+  });
+
+  // ── Run Goal ──────────────────────────────────────────────────────────────
+  function submitGoal() {
+    const txt = (goalInput.value || '').trim();
+    if (!txt) return;
+    socket.emit('set_ai_goal', { goal: txt });
+    goalInput.value = '';
+  }
+
+  goalRunBtn.addEventListener('click', submitGoal);
+  goalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitGoal(); });
+  goalStopBtn.addEventListener('click', () => {
+    socket.emit('set_ai_goal', { stop: true });
+    goalStatus.style.display = 'none';
+  });
+
+  // ── Render goal progress ──────────────────────────────────────────────────
+  const STEP_ICONS = { done: '✓', running: '↻', pending: '○' };
+
+  function renderGoalUpdate(data) {
+    if (!data) return;
+
+    // Planning state (LLM is generating the plan)
+    if (data.planning) {
+      goalStatus.style.display = '';
+      goalLabel.textContent    = '"' + (data.goalText || '') + '"';
+      goalStepCount.textContent = 'Planning…';
+      goalStepsList.innerHTML  = '<div class="ai-step-planning">Contacting LLM — generating step plan…</div>';
+      return;
+    }
+
+    if (!data.goal) {
+      // Goal cleared / completed
+      if (data.completed) {
+        goalStepCount.textContent = 'Completed!';
+        // Leave the steps visible for a moment then hide
+        setTimeout(() => {
+          if (goalStepCount.textContent === 'Completed!') goalStatus.style.display = 'none';
+        }, 6000);
+      } else {
+        goalStatus.style.display = 'none';
+      }
+      return;
+    }
+
+    const g = data.goal;
+    goalStatus.style.display  = '';
+    goalLabel.textContent     = '"' + g.text + '"';
+    goalStepCount.textContent = (g.stepIndex + (data.running ? 0 : 0)) + ' / ' + g.totalSteps + ' steps';
+
+    goalStepsList.innerHTML = (g.steps || []).map((step, i) => {
+      const st = step.status || 'pending';
+      return '<div class="ai-step-item ai-step-' + st + '">' +
+               '<span class="ai-step-icon">' + (STEP_ICONS[st] || '○') + '</span>' +
+               '<span class="ai-step-desc">' + escapeHtml(step.description || step.action) + '</span>' +
+               '<span class="ai-step-badge ai-step-badge-' + st + '">' + st + '</span>' +
+             '</div>';
+    }).join('');
+  }
+
+  // ── AI Conversation feed ──────────────────────────────────────────────────
+  function appendAiMessage(data) {
+    // Remove empty placeholder
+    const empty = chatFeed.querySelector('.ai-feed-empty');
+    if (empty) empty.remove();
+
+    const line = document.createElement('div');
+    line.className = 'ai-feed-line';
+
+    const ts = document.createElement('span');
+    ts.className   = 'ai-feed-ts';
+    ts.textContent = new Date(data.at || Date.now()).toLocaleTimeString();
+
+    const user = document.createElement('span');
+    user.className   = 'ai-feed-user';
+    user.textContent = data.username + ':';
+
+    const msg = document.createElement('span');
+    msg.className   = 'ai-feed-msg ai-feed-player';
+    msg.textContent = ' ' + data.message;
+
+    const sep = document.createElement('span');
+    sep.className   = 'ai-feed-sep';
+    sep.textContent = ' → ';
+
+    const reply = document.createElement('span');
+    reply.className   = 'ai-feed-msg ai-feed-bot';
+    reply.textContent = data.reply;
+
+    line.append(ts, user, msg, sep, reply);
+    chatFeed.appendChild(line);
+    chatFeed.scrollTop = chatFeed.scrollHeight;
+
+    while (chatFeed.children.length > MAX_FEED_LINES) {
+      chatFeed.removeChild(chatFeed.firstChild);
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Socket events ─────────────────────────────────────────────────────────
+  socket.on('ai_goal_update',  renderGoalUpdate);
+  socket.on('ai_chat_reply',   appendAiMessage);
+  socket.on('ai_chat_state',   (d) => { if (d && typeof d.llmChatEnabled === 'boolean') setAiChatDisplay(d.llmChatEnabled); });
+
+  // ── Fetch initial AI status on load ───────────────────────────────────────
+  async function fetchAiStatus() {
+    try {
+      const r = await fetch('/bot-api/ai/status', { cache: 'no-store' });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (d.provider)       renderProvider(d.provider);
+      if (typeof d.llmChatEnabled === 'boolean') setAiChatDisplay(d.llmChatEnabled);
+      if (d.goal)           renderGoalUpdate(d.goal);
+    } catch (_) {}
+  }
+
+  fetchAiStatus();
+  setInterval(fetchAiStatus, 20000);
+})();
+
 // ─── Connection Health (KeepAlive) widget ────────────────────────────────
 (function () {
   const widget   = document.getElementById('keepaliveWidget');

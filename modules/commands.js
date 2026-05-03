@@ -517,21 +517,28 @@ function handleChat(ctx, username, message) {
   }
 
   if (!raw.startsWith('!')) {
-    // Natural AI chat — fires when a MANAGER+ player addresses the bot by name
-    // and the owner has enabled AI chat with !aichat on
-    if (tier >= roles.TIERS.MANAGER && ctx.manager && ctx.manager.llmChatEnabled) {
-      if (chatResponder.isAddressedToBot(bot.username, raw)) {
-        const { think: _think } = require('../ai/decisionEngine');
-        const _snap = bot && bot.entity ? _think(bot) : null;
-        chatResponder.respond(ctx, username, raw, _snap).then(({ reply, plan }) => {
-          if (reply) say(bot, reply);
-          if (plan && plan.length) {
-            goalPlanner.executePlan(ctx, plan, raw, (msg) => say(bot, msg));
+    // Natural AI chat — fires for MANAGER+ when AI chat is enabled.
+    // Responds to ALL messages (not just name-mentions) so conversation feels natural.
+    if (tier >= roles.TIERS.MANAGER && ctx.manager && ctx.manager.llmChatEnabled && raw.length >= 2) {
+      const { think: _think } = require('../ai/decisionEngine');
+      const _snap = bot && bot.entity ? _think(bot) : null;
+      chatResponder.respond(ctx, username, raw, _snap).then(({ reply, plan }) => {
+        if (reply) {
+          say(bot, reply);
+          // Forward to dashboard AI chat feed
+          if (ctx.manager && typeof ctx.manager.emit === 'function') {
+            ctx.manager.emit('ai_chat_reply', {
+              username, message: raw, reply,
+              at: new Date().toISOString()
+            });
           }
-        }).catch(err => {
-          if (ctx.manager) ctx.manager.log('[chatAI] Error: ' + (err && err.message));
-        });
-      }
+        }
+        if (plan && plan.length) {
+          goalPlanner.executePlan(ctx, plan, raw, (msg) => say(bot, msg));
+        }
+      }).catch(err => {
+        if (ctx.manager) ctx.manager.log('[chatAI] Error: ' + (err && err.message));
+      });
     }
     return false;
   }
@@ -663,6 +670,7 @@ function handleCommand(ctx, username, message, tier) {
       bot.chat('[FAERO]: Survival: !eat | !food | !inv | !equip <item> | !retreat | !sort');
       bot.chat('[FAERO]: Waypoints: !waypoint set|list|tp|delete <name>');
       bot.chat('[FAERO]: AI Modes: !mode idle|survival|guard|farm|mine');
+      bot.chat('[FAERO]: AI Brain: !ai <goal> | !aistop | !aichat on|off');
       bot.chat('[FAERO]: Combat:   !pvp on|off | !target <mob> | !protect');
       bot.chat('[FAERO]: Debug:    !tasklist | !debug on|off | !status');
       if (isAdmin) {

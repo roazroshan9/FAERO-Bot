@@ -68,6 +68,34 @@ function attachSocket(io, botManager) {
       socket.emit('log', { at: new Date().toISOString(), message: '[cleanup] Force cleanup triggered from dashboard' });
     });
 
+    socket.on('set_ai_goal', (payload) => {
+      try {
+        const goalPlanner = require('../ai/goalPlanner');
+        payload = payload || {};
+        if (payload.stop || !payload.goal) {
+          const ctx = botManager.getContext && botManager.getContext();
+          if (ctx) goalPlanner.clearGoal(ctx);
+          return;
+        }
+        const ctx = botManager.getContext && botManager.getContext();
+        if (!ctx || !ctx.bot || !ctx.bot.entity) {
+          socket.emit('errorMessage', 'Bot is offline — connect the bot first');
+          return;
+        }
+        goalPlanner.setGoal(ctx, String(payload.goal).trim(), (msg) => {
+          try { ctx.bot.chat('[FAERO]: ' + msg); } catch (_) {}
+        });
+      } catch (err) {
+        socket.emit('errorMessage', err.message);
+      }
+    });
+
+    socket.on('set_ai_chat', (payload) => {
+      const enabled = Boolean(payload && payload.enabled);
+      botManager.llmChatEnabled = enabled;
+      io.emit('ai_chat_state', { llmChatEnabled: enabled });
+    });
+
     socket.on('set_ai_mode', (payload) => {
       const enabled = Boolean(payload && payload.enabled);
       botManager.setAiMode(enabled);
@@ -105,6 +133,8 @@ function attachSocket(io, botManager) {
     });
   });
 
+  botManager.on('ai_goal_update', (data)  => io.emit('ai_goal_update',  data));
+  botManager.on('ai_chat_reply',  (data)  => io.emit('ai_chat_reply',   data));
   botManager.on('log', (entry) => io.emit('log', entry));
   botManager.on('bot', (status) => {
     io.emit('status', status);

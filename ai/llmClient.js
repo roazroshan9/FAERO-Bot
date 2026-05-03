@@ -156,4 +156,12 @@ function isAvailable() {
   return Boolean(process.env.GROQ_API_KEY || process.env.DEEPSEEK_API_KEY);
 }
 
-module.exports = { complete, extractJSON, isAvailable };
+function getProviderInfo() {
+  const hasGroq     = Boolean(process.env.GROQ_API_KEY);
+  const hasDeepSeek = Boolean(process.env.DEEPSEEK_API_KEY);
+  if (hasGroq)     return { provider: 'groq',     model: process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL,         available: true  };
+  if (hasDeepSeek) return { provider: 'deepseek', model: process.env.DEEPSEEK_MODEL || DEFAULT_DEEPSEEK_MODEL, available: true  };
+  return { provider: null, model: null, available: false };
+}
+
+module.exports = { complete, extractJSON, isAvailable, getProviderInfo };

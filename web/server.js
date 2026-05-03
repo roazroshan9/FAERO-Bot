@@ -427,6 +427,48 @@ function mountRoutes(app, io, botManager) {
     }
   });
 
+  // ── AI Brain status ────────────────────────────────────────────────────────
+  app.get('/bot-api/ai/status', (req, res) => {
+    const llmClient   = require('../ai/llmClient');
+    const goalPlanner = require('../ai/goalPlanner');
+    res.json({
+      ok:           true,
+      provider:     llmClient.getProviderInfo(),
+      llmChatEnabled: Boolean(botManager.llmChatEnabled),
+      goal:         goalPlanner.getGoalStatus()
+    });
+  });
+
+  app.post('/bot-api/ai/goal', (req, res) => {
+    try {
+      const goalText = String((req.body && req.body.goal) || '').trim();
+      const stop     = Boolean(req.body && req.body.stop);
+      const goalPlanner = require('../ai/goalPlanner');
+      if (stop || !goalText) {
+        const ctx = botManager.getContext && botManager.getContext();
+        if (ctx) goalPlanner.clearGoal(ctx);
+        return res.json({ ok: true, cleared: true });
+      }
+      const ctx = botManager.getContext && botManager.getContext();
+      if (!ctx || !ctx.bot || !ctx.bot.entity) {
+        return res.status(409).json({ ok: false, error: 'Bot is offline' });
+      }
+      goalPlanner.setGoal(ctx, goalText, (msg) => {
+        try { ctx.bot.chat('[FAERO]: ' + msg); } catch (_) {}
+      });
+      res.json({ ok: true, goal: goalText });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/ai/chat', (req, res) => {
+    const enabled = Boolean(req.body && req.body.enabled);
+    botManager.llmChatEnabled = enabled;
+    io.emit('ai_chat_state', { llmChatEnabled: enabled });
+    res.json({ ok: true, llmChatEnabled: enabled });
+  });
+
   app.post('/bot-api/chat', (req, res) => {
     try {
       const message = String((req.body && req.body.message) || '').trim();
