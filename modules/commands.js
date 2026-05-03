@@ -31,6 +31,8 @@ const models        = require('../lib/persistence/models');
 const Vec3          = require('vec3').Vec3;
 const { AreaScanner, SCAN_RANGE } = require('./scanner');
 const securityLog                 = require('../core/securityLog');
+const goalPlanner                 = require('../ai/goalPlanner');
+const chatResponder               = require('../ai/chatResponder');
 
 // ─── Module-level scanner singleton (per-process; attached to ctx.manager) ────
 // Using a module singleton ensures `!mineblock` and `!mode mine` share the same
@@ -459,6 +461,16 @@ function parseIntent(text) {
   m = text.match(/^(?:mine|dig|find|get)\s+([a-z0-9_]+)(?:\s+(\d+))?$/);
   if (m) return { cmd: 'mineblock', block: m[1], amount: m[2] ? Math.max(1, Math.min(Number(m[2]), 256)) : 64 };
 
+  // ── AI Brain — goal planner & natural chat ────────────────────────────────
+  m = text.match(/^ai\s+(.+)$/);
+  if (m) return { cmd: 'ai_goal', goal: m[1].trim() };
+
+  m = text.match(/^(?:aistop|ai\s+stop|stopai|cleargoal|clear\s*goal)$/);
+  if (m) return { cmd: 'ai_stop' };
+
+  m = text.match(/^(?:aichat|ai\s*chat)\s+(on|off|enable|disable)$/i);
+  if (m) return { cmd: 'ai_chat', enabled: /^(?:on|enable)$/i.test(m[1]) };
+
   return null;
 }
 
@@ -504,7 +516,25 @@ function handleChat(ctx, username, message) {
     // Not a yes/no → fall through to normal command handling
   }
 
-  if (!raw.startsWith('!')) return false;
+  if (!raw.startsWith('!')) {
+    // Natural AI chat — fires when a MANAGER+ player addresses the bot by name
+    // and the owner has enabled AI chat with !aichat on
+    if (tier >= roles.TIERS.MANAGER && ctx.manager && ctx.manager.llmChatEnabled) {
+      if (chatResponder.isAddressedToBot(bot.username, raw)) {
+        const { think: _think } = require('../ai/decisionEngine');
+        const _snap = bot && bot.entity ? _think(bot) : null;
+        chatResponder.respond(ctx, username, raw, _snap).then(({ reply, plan }) => {
+          if (reply) say(bot, reply);
+          if (plan && plan.length) {
+            goalPlanner.executePlan(ctx, plan, raw, (msg) => say(bot, msg));
+          }
+        }).catch(err => {
+          if (ctx.manager) ctx.manager.log('[chatAI] Error: ' + (err && err.message));
+        });
+      }
+    }
+    return false;
+  }
 
   const body = raw.slice(1).trim();
   return handleCommand(ctx, username, body, tier);
@@ -1296,6 +1326,40 @@ function handleCommand(ctx, username, message, tier) {
       const removed = roles.removeFromRole('managerMcNames', targetName);
       if (!removed) { say(bot, targetName + ' is not a Manager.'); return false; }
       say(bot, 'Revoked Manager role from ' + targetName + '.');
+      return true;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // AI BRAIN — LLM GOAL PLANNER
+    // ════════════════════════════════════════════════════════════════════════
+
+    case 'ai_goal': {
+      const goalText = intent.goal;
+      if (!goalText) { say(bot, 'Usage: !ai <your goal>'); return false; }
+      // Goal planner manages the task queue directly — do NOT wrap in commandTask
+      // to avoid a deadlock (commandTask blocks queue; planner pushes into same queue)
+      if (ctx.manager && ctx.manager.tryCommandCooldown) {
+        if (!ctx.manager.tryCommandCooldown()) {
+          say(bot, 'Cooldown active — wait a moment, ' + greet(userTier) + '.');
+          return false;
+        }
+      }
+      if (ctx.manager && ctx.manager.commandInterrupt) ctx.manager.commandInterrupt();
+      const { think: _decThink } = require('../ai/decisionEngine');
+      const _snap = bot && bot.entity ? _decThink(bot) : null;
+      goalPlanner.setGoal(ctx, goalText, (msg) => say(bot, msg), _snap)
+        .catch(err => say(bot, 'AI error: ' + (err && err.message ? err.message.slice(0, 80) : 'unknown')));
+      return true;
+    }
+
+    case 'ai_stop': {
+      goalPlanner.clearGoal(ctx, (msg) => say(bot, msg));
+      return true;
+    }
+
+    case 'ai_chat': {
+      if (ctx.manager) ctx.manager.llmChatEnabled = Boolean(intent.enabled);
+      say(bot, '[FAERO] AI chat: ' + (intent.enabled ? 'ON — say my name to talk' : 'OFF'));
       return true;
     }
 

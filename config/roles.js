@@ -136,6 +136,11 @@ const MC_PERMISSIONS = Object.freeze({
   add_manager:    TIERS.ADMIN,
   remove_manager: TIERS.ADMIN,
 
+  // ── AI Brain (LLM) ───────────────────────────────────────────────────────
+  ai_goal:        TIERS.MANAGER,
+  ai_stop:        TIERS.MANAGER,
+  ai_chat:        TIERS.OWNER,
+
   // ── OWNER only ───────────────────────────────────────────────────────────
   add_admin:      TIERS.OWNER,
   remove_admin:   TIERS.OWNER

@@ -37,6 +37,7 @@ class BotManager extends EventEmitter {
     this.pvpEnabled = String(process.env.PVP_ENABLED || '').toLowerCase() === 'true';
     this.lowPowerMode = false;
     this.aiModeEnabled = false;
+    this.llmChatEnabled = false;
     this.cleanupTimer = null;
     this._dangerWatchTimer = null;
     this.keepAlive = new KeepAlive({
