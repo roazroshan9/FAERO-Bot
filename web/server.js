@@ -806,6 +806,104 @@ function mountRoutes(app, io, botManager) {
       botManager.log('[schematics] Deploy failed for "' + entry.name + '": ' + err.message);
     });
   });
+
+  // ── Tactical Combat Engine API ─────────────────────────────────────────────
+
+  const tacticalCombat = require('../modules/tacticalCombat');
+
+  app.get('/bot-api/tactical/status', (req, res) => {
+    res.json({ ok: true, tactical: tacticalCombat.getStatus() });
+  });
+
+  app.get('/bot-api/tactical/intel', (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 40, 80);
+    res.json({ ok: true, intel: tacticalCombat.getIntelFeed(limit) });
+  });
+
+  app.post('/bot-api/tactical/formation', (req, res) => {
+    try {
+      const { formation } = req.body || {};
+      const result = tacticalCombat.setFormation(formation || null);
+      res.json({ ok: true, formation: result });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/tactical/roles/assign', (req, res) => {
+    try {
+      const allBots = fleetMgr.getAllBotEntries(botManager);
+      const roles   = tacticalCombat.assignRoles(allBots);
+      const snapshot = {};
+      for (const [id, r] of roles.entries()) snapshot[id] = r;
+      res.json({ ok: true, roles: snapshot, bots: allBots.length });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/tactical/roles/set', (req, res) => {
+    try {
+      const { botId, role } = req.body || {};
+      if (!botId || !role) return res.status(400).json({ ok: false, error: '"botId" and "role" are required' });
+      tacticalCombat.setRole(String(botId), String(role));
+      res.json({ ok: true, botId, role });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/tactical/target/acquire', (req, res) => {
+    try {
+      const range   = Number((req.body && req.body.range) || 16);
+      const allBots = fleetMgr.getAllBotEntries(botManager);
+      const locked  = tacticalCombat.acquireTarget(allBots, range);
+      if (!locked) return res.status(404).json({ ok: false, error: 'No hostile targets found within ' + range + ' blocks' });
+      res.json({ ok: true, target: locked });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/tactical/target/clear', (req, res) => {
+    tacticalCombat.clearTarget();
+    res.json({ ok: true, message: 'Target lock cleared' });
+  });
+
+  app.post('/bot-api/tactical/engage', async (req, res) => {
+    try {
+      if (tacticalCombat.getStatus().engageActive) {
+        return res.status(409).json({ ok: false, error: 'Engage already in progress — call /abort first' });
+      }
+      const allBots = fleetMgr.getAllBotEntries(botManager);
+      const online  = allBots.filter(e => e.bot && e.bot.entity);
+      if (!online.length) return res.status(409).json({ ok: false, error: 'No bots online' });
+
+      if (!tacticalCombat.getLockedTarget()) {
+        const locked = tacticalCombat.acquireTarget(online, Number((req.body && req.body.range) || 16));
+        if (!locked) return res.status(404).json({ ok: false, error: 'No targets in range' });
+      }
+
+      tacticalCombat.assignRoles(online);
+
+      const leaderBot  = botManager.bot;
+      const approachFrom = leaderBot && leaderBot.entity ? leaderBot.entity.position : null;
+
+      // Respond immediately — engage runs async
+      res.json({ ok: true, message: 'Fleet engage started', bots: online.length, target: tacticalCombat.getLockedTarget() });
+
+      tacticalCombat.engage(online, approachFrom).catch((err) => {
+        botManager.log('[tactical] Engage error: ' + err.message);
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/tactical/abort', (req, res) => {
+    tacticalCombat.abortEngage();
+    res.json({ ok: true, message: 'Engage aborted' });
+  });
 }
 
 function buildConfigSummary(botManager) {

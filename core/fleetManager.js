@@ -448,6 +448,70 @@ class FleetManager extends EventEmitter {
         this.log('[fleet] Leave — all minions disconnected (still registered)');
         break;
 
+      // ── Tactical Combat commands ─────────────────────────────────────────
+
+      case 'formation': {
+        const tactical = require('../modules/tacticalCombat');
+        try {
+          const validFormations = ['wedge', 'pincer', 'shield_wall'];
+          const name = arg && validFormations.includes(arg.toLowerCase()) ? arg.toLowerCase() : null;
+          tactical.setFormation(name);
+          this.log('[tactical] Formation → ' + (name || 'none'));
+        } catch (err) {
+          this.log('[tactical] Formation error: ' + err.message);
+        }
+        break;
+      }
+
+      case 'assign_roles': {
+        const tactical = require('../modules/tacticalCombat');
+        const entries  = this.getAllBotEntries(this._leader);
+        tactical.assignRoles(entries);
+        this.log('[tactical] Roles assigned to ' + entries.length + ' bot(s)');
+        break;
+      }
+
+      case 'lock_target': {
+        const tactical = require('../modules/tacticalCombat');
+        const entries  = this.getAllBotEntries(this._leader);
+        const range    = arg ? Number(arg) : 16;
+        const locked   = tactical.acquireTarget(entries, isNaN(range) ? 16 : range);
+        if (locked) {
+          this.log('[tactical] 🎯 Target locked: ' + locked.name);
+        } else {
+          this.log('[tactical] No hostile targets found within ' + (isNaN(range) ? 16 : range) + ' blocks');
+        }
+        break;
+      }
+
+      case 'engage': {
+        const tactical = require('../modules/tacticalCombat');
+        const entries  = this.getAllBotEntries(this._leader);
+        const online   = entries.filter(e => e.bot && e.bot.entity);
+        if (!online.length) {
+          this.log('[tactical] No bots online for engage');
+          break;
+        }
+        if (!tactical.getLockedTarget()) {
+          const locked = tactical.acquireTarget(online, 16);
+          if (!locked) { this.log('[tactical] No targets in range — lock a target first'); break; }
+        }
+        tactical.assignRoles(online);
+        const leaderBot    = this._leader && this._leader.bot;
+        const approachFrom = leaderBot && leaderBot.entity ? leaderBot.entity.position : null;
+        this.log('[tactical] ⚔ Fleet engage initiated — formation: ' + (tactical.getFormation() || 'wedge'));
+        tactical.engage(online, approachFrom).catch(err => this.log('[tactical] Engage error: ' + err.message));
+        break;
+      }
+
+      case 'abort': {
+        const tactical = require('../modules/tacticalCombat');
+        tactical.abortEngage();
+        tactical.clearTarget();
+        this.log('[tactical] 🛑 Fleet engage aborted, target cleared');
+        break;
+      }
+
       default:
         this.log('[fleet] Unknown group command: ' + String(cmd));
     }
@@ -560,6 +624,35 @@ class FleetManager extends EventEmitter {
       minions: this._minions.map((m) => m.getInventory()),
       total:   this._minions.length
     };
+  }
+
+  /**
+   * Return a unified list of all bot entries (leader + minions) suitable for
+   * the tactical combat engine.  Each entry: { id, bot, username, role }.
+   * @param {object} leaderBotManager  — pass botManager from server.js
+   */
+  getAllBotEntries(leaderBotManager) {
+    const entries = [];
+    // Leader
+    const lbm = leaderBotManager || this._leader;
+    if (lbm) {
+      entries.push({
+        id:       'leader',
+        bot:      lbm.bot || null,
+        username: (lbm.bot && lbm.bot.username) || 'leader',
+        role:     'leader'
+      });
+    }
+    // Minions
+    for (const m of this._minions) {
+      entries.push({
+        id:       m.id,
+        bot:      m.bot || null,
+        username: m.username,
+        role:     'soldier'
+      });
+    }
+    return entries;
   }
 
   // ── Internal: follow loop ─────────────────────────────────────────────────────

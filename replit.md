@@ -37,7 +37,7 @@ The web control panel features a cyberpunk glassmorphism UI with neon accents, s
 *   **Custom Schematic Format**: Supports JSON schematics with relative (`dx/dy/dz`) or absolute (`x/y/z`) block coordinates.
 *   **Hive Mind**: `core/hiveMind.js` acts as a singleton EventEmitter for collective intelligence, providing a shared memory bus, collective resource pool, task delegation engine, fleet health monitoring, and danger zone persistence.
 *   **Autonomous Survival v2**: Enhanced full survival loop for all bots, including food chain management and night shelter.
-*   **Tactical Combat Engine**: Planned for advanced combat strategies including formations, role assignment, and focus fire.
+*   **Tactical Combat Engine**: `modules/tacticalCombat.js` — singleton EventEmitter providing Formation System (Wedge, Pincer, Shield Wall with rotation geometry), auto Role Assignment scoring (Tank/DPS/Support by health+armor+sword+food), Focus-Fire Target Locking (fleet-wide entity lock with TTL and live resolution), and Staggered Attack Timing (slot×staggerStep ms per bot). Integrated into HiveMind status snapshot, FleetManager group commands (`formation`, `assign_roles`, `lock_target`, `engage`, `abort`), REST API (`/bot-api/tactical/*`), and Socket.IO event bridge (`tactical:*` events piped to dashboard and hive intel feed).
 *   **Neural Social Engine**: Planned for persistent conversation memory and improved human interaction.
 *   **Adaptive World Oracle**: Planned for server map learning, player behavior profiling, and predictive resource routing.
 

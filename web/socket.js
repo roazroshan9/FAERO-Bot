@@ -175,6 +175,95 @@ function attachSocket(io, botManager) {
     socket.on('fleet:status', () => {
       socket.emit('fleet:update', fleetManager.getStatus());
     });
+
+    // ── Tactical Combat Engine socket handlers ────────────────────────────────
+    const tacticalCombat = require('../modules/tacticalCombat');
+
+    socket.on('tactical:status', () => {
+      socket.emit('tactical:status', tacticalCombat.getStatus());
+    });
+
+    socket.on('tactical:formation', (payload) => {
+      try {
+        const name = payload && payload.formation != null ? String(payload.formation) : null;
+        tacticalCombat.setFormation(name || null);
+        io.emit('tactical:status', tacticalCombat.getStatus());
+      } catch (err) {
+        socket.emit('errorMessage', '[tactical] ' + err.message);
+      }
+    });
+
+    socket.on('tactical:assign_roles', () => {
+      try {
+        const allBots = fleetManager.getAllBotEntries(botManager);
+        tacticalCombat.assignRoles(allBots);
+        io.emit('tactical:status', tacticalCombat.getStatus());
+      } catch (err) {
+        socket.emit('errorMessage', '[tactical] ' + err.message);
+      }
+    });
+
+    socket.on('tactical:acquire_target', (payload) => {
+      try {
+        const range   = Number((payload && payload.range) || 16);
+        const allBots = fleetManager.getAllBotEntries(botManager);
+        const locked  = tacticalCombat.acquireTarget(allBots, range);
+        if (locked) {
+          io.emit('tactical:targetLocked', locked);
+          io.emit('tactical:status', tacticalCombat.getStatus());
+        } else {
+          socket.emit('errorMessage', '[tactical] No hostile targets found within ' + range + ' blocks');
+        }
+      } catch (err) {
+        socket.emit('errorMessage', '[tactical] ' + err.message);
+      }
+    });
+
+    socket.on('tactical:engage', (payload) => {
+      try {
+        if (tacticalCombat.getStatus().engageActive) {
+          socket.emit('errorMessage', '[tactical] Engage already in progress');
+          return;
+        }
+        const allBots = fleetManager.getAllBotEntries(botManager);
+        const online  = allBots.filter(e => e.bot && e.bot.entity);
+        if (!online.length) {
+          socket.emit('errorMessage', '[tactical] No bots online for engage');
+          return;
+        }
+        if (!tacticalCombat.getLockedTarget()) {
+          const range  = Number((payload && payload.range) || 16);
+          const locked = tacticalCombat.acquireTarget(online, range);
+          if (!locked) {
+            socket.emit('errorMessage', '[tactical] No targets in range — lock a target first');
+            return;
+          }
+        }
+        tacticalCombat.assignRoles(online);
+        const leaderBot    = botManager.bot;
+        const approachFrom = leaderBot && leaderBot.entity ? leaderBot.entity.position : null;
+
+        io.emit('tactical:status', tacticalCombat.getStatus());
+
+        tacticalCombat.engage(online, approachFrom).then(() => {
+          io.emit('tactical:status', tacticalCombat.getStatus());
+        }).catch((err) => {
+          botManager.log('[tactical] Engage error: ' + err.message);
+        });
+      } catch (err) {
+        socket.emit('errorMessage', '[tactical] ' + err.message);
+      }
+    });
+
+    socket.on('tactical:abort', () => {
+      tacticalCombat.abortEngage();
+      io.emit('tactical:status', tacticalCombat.getStatus());
+    });
+
+    socket.on('tactical:clear_target', () => {
+      tacticalCombat.clearTarget();
+      io.emit('tactical:status', tacticalCombat.getStatus());
+    });
   });
 
   botManager.on('ai_goal_update', (data)  => io.emit('ai_goal_update',  data));
@@ -200,6 +289,23 @@ function attachSocket(io, botManager) {
   fleetManagerBridge.on('fleet:log',    (entry) => {
     io.emit('log',        entry);
     io.emit('fleet:log',  entry);
+  });
+
+  // ── Tactical Combat Engine event bridge ───────────────────────────────────
+  const tacticalEngine = require('../modules/tacticalCombat');
+  tacticalEngine.on('tactical:intel',         (e)    => io.emit('tactical:intel',         e));
+  tacticalEngine.on('tactical:formation',     (data) => io.emit('tactical:formation',     data));
+  tacticalEngine.on('tactical:roles',         (data) => io.emit('tactical:roles',         data));
+  tacticalEngine.on('tactical:targetLocked',  (data) => io.emit('tactical:targetLocked',  data));
+  tacticalEngine.on('tactical:targetCleared', (data) => io.emit('tactical:targetCleared', data));
+  tacticalEngine.on('tactical:engageStart',   (data) => io.emit('tactical:engageStart',   data));
+  tacticalEngine.on('tactical:engageEnd',     (data) => io.emit('tactical:engageEnd',     data));
+  tacticalEngine.on('tactical:engageAborted', (data) => io.emit('tactical:engageAborted', data));
+  tacticalEngine.on('tactical:swing',         (data) => io.emit('tactical:swing',         data));
+
+  // Pipe tactical intel into the hive intel channel too
+  tacticalEngine.on('tactical:intel', (entry) => {
+    io.emit('hive:intel', { type: 'combat', message: entry.message, at: entry.at });
   });
 
   // ── Hive Mind event bridge ─────────────────────────────────────────────────

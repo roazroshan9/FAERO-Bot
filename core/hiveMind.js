@@ -324,6 +324,18 @@ class HiveMind extends EventEmitter {
         survivalState: e.survivalState || null
       });
     }
+    // Tactical Combat Engine state (lazy-loaded to avoid circular dep on init)
+    let tacticalState = null;
+    try {
+      const tactical = require('../modules/tacticalCombat');
+      tacticalState = {
+        formation:    tactical.getFormation(),
+        lockedTarget: tactical.getLockedTarget(),
+        roles:        tactical.getRolesSnapshot(),
+        engageActive: tactical.getStatus().engageActive
+      };
+    } catch (_) {}
+
     return {
       bots,
       totalBots:        this._bots.size,
@@ -335,7 +347,8 @@ class HiveMind extends EventEmitter {
       pool:             this.getAggregatedPool(),
       taskLedger:       Array.from(this._taskLedger.entries())
                           .map(([id, t]) => ({ botId: id, ...t })),
-      intelFeed:        this._intelFeed.slice(-40)
+      intelFeed:        this._intelFeed.slice(-40),
+      tactical:         tacticalState
     };
   }
 
