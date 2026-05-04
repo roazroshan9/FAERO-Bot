@@ -3026,3 +3026,574 @@ pre {
 .sl-delete-btn:hover:not(:disabled) {
   background: rgba(255,49,95,0.22);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FAERO PROFESSIONAL UI — Three-Column Grid Layout + New Components
+   Added on top of existing component styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Font additions ─────────────────────────────────────────────────────── */
+:root {
+  --font-heading:  'Rajdhani', 'JetBrains Mono', monospace;
+  --font-data:     'Share Tech Mono', 'JetBrains Mono', monospace;
+  --font-mono:     'JetBrains Mono', 'Fira Code', monospace;
+  --sidebar-w:     240px;
+  --right-w:       300px;
+  --topbar-h:      54px;
+  --gap:           12px;
+}
+
+h1, h2, h3 { font-family: var(--font-heading); }
+
+/* ── Shell: 3-column CSS Grid ────────────────────────────────────────────── */
+.shell {
+  display: none;
+  width: 100%;
+  max-width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.shell.unlocked {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr var(--right-w);
+  grid-template-rows: var(--topbar-h) 1fr;
+  grid-template-areas:
+    "topbar topbar topbar"
+    "sidebar main right";
+}
+
+/* ── Topbar ──────────────────────────────────────────────────────────────── */
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 18px;
+  border-radius: 0;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  border-bottom: 1px solid var(--line);
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.topbar-logo {
+  font-family: var(--font-heading);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+  text-transform: uppercase;
+}
+
+.topbar-wordmark {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.topbar-status .status-pill,
+.topbar-status .mini-readout {
+  padding: 5px 14px;
+  font-size: 11px;
+}
+
+.sidebar-toggle-btn {
+  margin-left: auto;
+  display: none;
+  background: rgba(0,255,255,0.08);
+  border: 1px solid var(--line);
+  color: var(--cyan);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ── Left Sidebar ────────────────────────────────────────────────────────── */
+.sidebar {
+  grid-area: sidebar;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: var(--gap);
+  border-right: 1px solid var(--line);
+  background: rgba(2, 10, 12, 0.62);
+}
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(0,255,255,0.14); border-radius: 2px; }
+
+/* Sidebar section label */
+.sidebar-section-label {
+  font-family: var(--font-data);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+/* Sidebar nav */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-link {
+  display: block;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  letter-spacing: 0.05em;
+  transition: background 0.15s, color 0.15s;
+  border: 1px solid transparent;
+}
+
+.sidebar-link:hover {
+  background: rgba(0,255,255,0.08);
+  color: var(--cyan);
+  border-color: rgba(0,255,255,0.18);
+}
+
+/* Sidebar panels */
+.sidebar-vitals,
+.sidebar-radar,
+.sidebar-action-hub,
+.sidebar-modes {
+  padding: 12px;
+  border-radius: 12px;
+}
+
+/* ── Vital Signs bars ────────────────────────────────────────────────────── */
+.vital-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  min-height: 18px;
+}
+
+.vital-row-stacked {
+  flex-wrap: wrap;
+}
+
+.vital-label {
+  font-family: var(--font-data);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  width: 32px;
+  flex-shrink: 0;
+}
+
+.vital-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.vital-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.55s cubic-bezier(0.4,0,0.2,1), background 0.4s;
+  will-change: width;
+}
+
+.vital-bar-health {
+  background: linear-gradient(90deg, #ff315f, #ff6080);
+  box-shadow: 0 0 8px rgba(255,49,95,0.55);
+}
+
+.vital-bar-health.high { background: linear-gradient(90deg, #39FF14, #56ff30); box-shadow: 0 0 8px rgba(57,255,20,0.5); }
+.vital-bar-health.mid  { background: linear-gradient(90deg, #ffc800, #ffd840); box-shadow: 0 0 8px rgba(255,200,0,0.5); }
+.vital-bar-health.low  { background: linear-gradient(90deg, #ff315f, #ff6080); box-shadow: 0 0 8px rgba(255,49,95,0.55); }
+
+.vital-bar-hunger {
+  background: linear-gradient(90deg, #ffc800, #ffe066);
+  box-shadow: 0 0 8px rgba(255,200,0,0.45);
+}
+
+.vital-bar-hunger.high { background: linear-gradient(90deg, #ffc800, #ffe066); }
+.vital-bar-hunger.mid  { background: linear-gradient(90deg, #ff8c00, #ffaa40); }
+.vital-bar-hunger.low  { background: linear-gradient(90deg, #ff4444, #ff6666); }
+
+.vital-value {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: #d8fff8;
+  white-space: nowrap;
+  flex-shrink: 0;
+  width: 36px;
+  text-align: right;
+}
+
+.vital-pos {
+  width: auto;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  flex: 1;
+}
+
+/* Override dl/dd inside vitals */
+.sidebar-vitals dd,
+.sidebar-vitals span[id] {
+  margin: 0;
+}
+
+/* ── Fleet Radar Canvas ──────────────────────────────────────────────────── */
+.sidebar-radar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.radar-wrap {
+  position: relative;
+  width: 196px;
+  height: 196px;
+}
+
+#radarCanvas {
+  display: block;
+  border-radius: 50%;
+  border: 1px solid rgba(0,255,255,0.22);
+  box-shadow: 0 0 18px rgba(0,255,255,0.12), inset 0 0 24px rgba(0,0,0,0.4);
+}
+
+.radar-crosshair {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+.radar-crosshair::before,
+.radar-crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(0,255,255,0.14);
+}
+
+.radar-crosshair::before {
+  left: 50%; top: 10%; width: 1px; height: 80%;
+  transform: translateX(-50%);
+}
+
+.radar-crosshair::after {
+  top: 50%; left: 10%; height: 1px; width: 80%;
+  transform: translateY(-50%);
+}
+
+.radar-legend {
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--muted);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.06em;
+}
+
+.radar-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* ── Formation buttons ───────────────────────────────────────────────────── */
+.formation-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.formation-btn {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,255,255,0.25);
+  background: rgba(0,255,255,0.06);
+  color: var(--muted);
+  font-family: var(--font-data);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.18s, border-color 0.18s, color 0.18s, box-shadow 0.18s;
+}
+
+.formation-btn:hover {
+  background: rgba(0,255,255,0.14);
+  border-color: rgba(0,255,255,0.5);
+  color: var(--cyan);
+}
+
+.formation-btn.active {
+  background: rgba(0,255,255,0.18);
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+
+/* ── Macro buttons ───────────────────────────────────────────────────────── */
+.macro-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.macro-btn {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.18s, box-shadow 0.18s, border-color 0.18s;
+}
+
+.macro-retreat {
+  background: rgba(255,49,95,0.12);
+  border-color: rgba(255,49,95,0.4);
+  color: #ff8fb0;
+}
+.macro-retreat:hover {
+  background: rgba(255,49,95,0.24);
+  box-shadow: 0 0 14px rgba(255,49,95,0.35);
+}
+
+.macro-engage {
+  background: rgba(255,140,0,0.12);
+  border-color: rgba(255,140,0,0.4);
+  color: #ffb55a;
+}
+.macro-engage:hover {
+  background: rgba(255,140,0,0.24);
+  box-shadow: 0 0 14px rgba(255,140,0,0.35);
+}
+
+.macro-rtb {
+  background: rgba(57,255,20,0.10);
+  border-color: rgba(57,255,20,0.35);
+  color: var(--green);
+}
+.macro-rtb:hover {
+  background: rgba(57,255,20,0.20);
+  box-shadow: var(--glow-green);
+}
+
+/* ── Mode toggle buttons in sidebar ─────────────────────────────────────── */
+.sidebar-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mode-toggle-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,0.04);
+  color: var(--muted);
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+}
+
+/* ── Main Scroll ─────────────────────────────────────────────────────────── */
+.main-scroll {
+  grid-area: main;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.main-scroll::-webkit-scrollbar { width: 5px; }
+.main-scroll::-webkit-scrollbar-track { background: transparent; }
+.main-scroll::-webkit-scrollbar-thumb { background: rgba(0,255,255,0.14); border-radius: 3px; }
+
+.main-scroll .card {
+  border-radius: 14px;
+  flex-shrink: 0;
+}
+
+/* Override old .grid layout for cards inside main-scroll */
+.main-scroll .grid {
+  display: contents;
+}
+
+/* ── Right Panel ─────────────────────────────────────────────────────────── */
+.right-panel {
+  grid-area: right;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding: var(--gap);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-left: 1px solid var(--line);
+  background: rgba(2, 8, 10, 0.55);
+}
+
+.right-panel::-webkit-scrollbar { width: 4px; }
+.right-panel::-webkit-scrollbar-track { background: transparent; }
+.right-panel::-webkit-scrollbar-thumb { background: rgba(0,255,255,0.14); border-radius: 2px; }
+
+.right-logs-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  min-height: 0;
+  padding: 14px;
+}
+
+.right-logs-panel .logs {
+  flex: 1;
+  overflow-y: auto;
+  max-height: none;
+  min-height: 0;
+}
+
+.right-chat-panel {
+  flex-shrink: 0;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.right-chat-panel .chat-messages {
+  max-height: 200px;
+}
+
+/* ── Responsive: collapse sidebar + right panel on mobile ────────────────── */
+@media (max-width: 900px) {
+  .shell.unlocked {
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--topbar-h) 1fr;
+    grid-template-areas:
+      "topbar"
+      "main";
+    height: 100vh;
+  }
+
+  .sidebar {
+    display: none;
+    position: fixed;
+    top: var(--topbar-h);
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-w);
+    z-index: 50;
+    background: rgba(2, 10, 12, 0.96);
+    backdrop-filter: blur(20px);
+  }
+
+  .sidebar.open {
+    display: flex;
+  }
+
+  .right-panel {
+    display: none;
+  }
+
+  .sidebar-toggle-btn {
+    display: block;
+  }
+
+  .main-scroll {
+    grid-area: main;
+  }
+}
+
+@media (max-width: 1100px) and (min-width: 901px) {
+  :root {
+    --sidebar-w: 200px;
+    --right-w:   260px;
+  }
+}
+
+/* ── Hero section: repurposed as condensed topbar supplement ─────────────── */
+.hero { display: none; }
+
+/* ── Ensure old .shell children still render properly ─────────────────────── */
+.shell > .grid {
+  display: contents;
+}
+
+/* Remove old block-based padding from .shell */
+.shell.unlocked > section.grid,
+.shell.unlocked > section.hero {
+  display: contents;
+}
+
+/* ── Sidebar vitals skeleton fix ────────────────────────────────────────── */
+.sidebar-vitals .skeleton-line {
+  display: inline-block;
+  width: 30px;
+  height: 10px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  animation: skeletonPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.9; }
+}
+

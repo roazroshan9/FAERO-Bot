@@ -11,6 +11,9 @@
     <meta name="theme-color" content="#000000">
     <title>FAERO</title>
     <link rel="manifest" href="/manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/style.css">
   </head>
   <body>
@@ -29,21 +32,111 @@
     </div>
 
     <main class="shell" id="main-content">
-      <section class="hero glass-panel">
-        <div>
-          <p class="eyebrow">MINEFLAYER AI COMMAND CENTER</p>
-          <h1>Cyber Control Panel</h1>
-          <p class="subtitle">Connect, command, monitor, and steer your Minecraft bot in real time.</p>
+
+      <!-- ── Topbar ─────────────────────────────────────────────────────── -->
+      <header class="topbar glass-panel">
+        <div class="topbar-brand">
+          <span class="topbar-logo">FAERO</span>
+          <span class="topbar-wordmark">AI Command Center</span>
         </div>
-        <div class="status-stack">
+        <div class="topbar-status">
           <div class="status-pill" id="running">OFFLINE</div>
           <div class="status-pill ai-pill" id="aiModePill">AI: OFF</div>
           <div class="mini-readout" id="connectionReadout">Awaiting connection</div>
         </div>
-      </section>
+        <button class="sidebar-toggle-btn" id="sidebarToggle" aria-label="Toggle sidebar">&#9776;</button>
+      </header>
 
-      <section class="grid">
-        <div class="card glass-panel connection-panel">
+      <!-- ── Left Sidebar ───────────────────────────────────────────────── -->
+      <aside class="sidebar" id="sidebar">
+
+        <nav class="sidebar-nav">
+          <a href="#panel-connection"  class="sidebar-link">&#x1F517; Connection</a>
+          <a href="#panel-runtime"     class="sidebar-link">&#x26A1; Runtime</a>
+          <a href="#panel-controller"  class="sidebar-link">&#x1F3AE; Controller</a>
+          <a href="#panel-commands"    class="sidebar-link">&#x1F4E1; Commands</a>
+          <a href="#panel-ai"          class="sidebar-link">&#x2728; AI Brain</a>
+          <a href="#panel-fleet"       class="sidebar-link">&#x1F916; Fleet</a>
+          <a href="#panel-hive"        class="sidebar-link">&#x1F9E0; Hive Mind</a>
+          <a href="#panel-inventory"   class="sidebar-link">&#x1F392; Inventory</a>
+          <a href="#panel-waypoints"   class="sidebar-link">&#x1F4CD; Waypoints</a>
+          <a href="#panel-schematic"   class="sidebar-link">&#x1F528; Lab</a>
+          <a href="#panel-diagnostics" class="sidebar-link">&#x1F4E1; Diagnostics</a>
+          <a href="#panel-config"      class="sidebar-link">&#x2699; Config</a>
+        </nav>
+
+        <!-- Vital Signs with animated progress bars -->
+        <div class="sidebar-vitals glass-panel">
+          <p class="sidebar-section-label">VITAL SIGNS</p>
+          <div class="vital-row">
+            <span class="vital-label">HP</span>
+            <div class="vital-bar-wrap">
+              <div class="vital-bar-fill vital-bar-health" id="healthBar" style="width:0%"></div>
+            </div>
+            <span id="health" class="vital-value"><span class="skeleton-line"></span></span>
+          </div>
+          <div class="vital-row">
+            <span class="vital-label">FOOD</span>
+            <div class="vital-bar-wrap">
+              <div class="vital-bar-fill vital-bar-hunger" id="hungerBar" style="width:0%"></div>
+            </div>
+            <span id="hunger" class="vital-value"><span class="skeleton-line"></span></span>
+          </div>
+          <div class="vital-row vital-row-stacked">
+            <span class="vital-label">XYZ</span>
+            <span id="position" class="vital-value vital-pos"><span class="skeleton-line"></span></span>
+          </div>
+          <div class="vital-row">
+            <span class="vital-label">STATE</span>
+            <span id="state" class="vital-value"><span class="skeleton-line"></span></span>
+          </div>
+        </div>
+
+        <!-- Fleet Radar / Mini-map -->
+        <div class="sidebar-radar glass-panel">
+          <p class="sidebar-section-label">FLEET RADAR</p>
+          <div class="radar-wrap">
+            <canvas id="radarCanvas" width="196" height="196"></canvas>
+            <div class="radar-crosshair"></div>
+          </div>
+          <p class="radar-legend">
+            <span class="radar-dot" style="background:#39FF14"></span>Leader&nbsp;&nbsp;
+            <span class="radar-dot" style="background:#00ffff"></span>Minion
+          </p>
+        </div>
+
+        <!-- Action Hub: Formation + Macro -->
+        <div class="sidebar-action-hub glass-panel">
+          <p class="sidebar-section-label">FORMATION</p>
+          <div class="formation-grid">
+            <button class="formation-btn" id="formationWedge"  data-formation="wedge">&#x276D; WEDGE</button>
+            <button class="formation-btn" id="formationPincer" data-formation="pincer">&#x276C;&#x276D; PINCER</button>
+            <button class="formation-btn" id="formationShield" data-formation="shield_wall">&#x25AD; SHIELD</button>
+          </div>
+
+          <p class="sidebar-section-label" style="margin-top:14px">MACRO OPS</p>
+          <div class="macro-grid">
+            <button class="macro-btn macro-retreat" id="macroRetreat">&#x26A0; EMERGENCY RETREAT</button>
+            <button class="macro-btn macro-engage"  id="macroEngage">&#x2694; ENGAGE ALL</button>
+            <button class="macro-btn macro-rtb"     id="macroRtb">&#x1F3E0; RETURN TO BASE</button>
+          </div>
+        </div>
+
+        <!-- Mode toggles -->
+        <div class="sidebar-modes glass-panel">
+          <p class="sidebar-section-label">MODES</p>
+          <button id="aiModeToggle"   class="ai-mode-off mode-toggle-btn">AI Mode: OFF</button>
+          <button id="lowPowerToggle" class="low-power-off mode-toggle-btn">Low Power: OFF</button>
+          <button id="forceCleanup"   class="cleanup-btn mode-toggle-btn">Force Cleanup</button>
+        </div>
+
+      </aside>
+
+      <!-- ── Main Scroll Area ───────────────────────────────────────────── -->
+      <div class="main-scroll" id="main-scroll">
+
+        <!-- Connection Panel -->
+        <div class="card glass-panel connection-panel" id="panel-connection">
           <div class="panel-title-row">
             <p class="eyebrow">LINK</p>
             <span class="pulse-dot"></span>
@@ -61,21 +154,8 @@
           </div>
         </div>
 
-        <div class="card glass-panel status-panel">
-          <div class="panel-title-row">
-            <p class="eyebrow">TELEMETRY</p>
-            <span class="pulse-dot cyan"></span>
-          </div>
-          <h2>Live Status</h2>
-          <dl class="stats">
-            <div><dt>Health</dt><dd id="health"><span class="skeleton-line"></span></dd></div>
-            <div><dt>Hunger</dt><dd id="hunger"><span class="skeleton-line"></span></dd></div>
-            <div><dt>Position</dt><dd id="position"><span class="skeleton-line"></span></dd></div>
-            <div><dt>State</dt><dd id="state"><span class="skeleton-line"></span></dd></div>
-          </dl>
-        </div>
-
-        <div class="card wide glass-panel runtime-panel">
+        <!-- Runtime Panel -->
+        <div class="card wide glass-panel runtime-panel" id="panel-runtime">
           <div class="panel-title-row">
             <p class="eyebrow">LIGHTWEIGHT RUNTIME</p>
             <span class="pulse-dot cyan"></span>
@@ -102,50 +182,37 @@
               <div><dt>Silence warns</dt><dd id="kaSilenceWarns">0</dd></div>
             </dl>
           </div>
-          <div class="control-row low-power-row">
-            <button id="aiModeToggle" class="ai-mode-off">AI Mode: OFF</button>
-            <button id="lowPowerToggle" class="low-power-off">Low Power Mode: OFF</button>
-            <button id="forceCleanup" class="cleanup-btn">Force Cleanup</button>
-          </div>
         </div>
 
-        <div class="card wide glass-panel advanced-panel">
+        <!-- Controller Panel (movement pad only) -->
+        <div class="card wide glass-panel advanced-panel" id="panel-controller">
           <div class="advanced-header">
             <div>
               <p class="eyebrow">MANUAL OVERRIDE</p>
-              <h2>Game Controller + Chat</h2>
-              <p class="chat-help">Hold movement keys for continuous movement. Release to stop. Chat accepts messages and commands.</p>
+              <h2>Game Controller</h2>
+              <p class="chat-help">Hold movement keys for continuous movement. Release to stop.</p>
             </div>
           </div>
-
           <div class="controller-chat-layout">
             <section class="movement-panel" aria-label="Movement Pad">
               <div class="movement-pad">
-                <button class="move-button forward" data-move="forward" aria-label="Move forward">↑</button>
-                <button class="move-button left" data-move="left" aria-label="Move left">←</button>
-                <button class="move-button right" data-move="right" aria-label="Move right">→</button>
-                <button class="move-button back" data-move="back" aria-label="Move back">↓</button>
+                <button class="move-button forward" data-move="forward" aria-label="Move forward">&#x2191;</button>
+                <button class="move-button left"    data-move="left"    aria-label="Move left">&#x2190;</button>
+                <button class="move-button right"   data-move="right"   aria-label="Move right">&#x2192;</button>
+                <button class="move-button back"    data-move="back"    aria-label="Move back">&#x2193;</button>
               </div>
               <div class="action-buttons">
-                <button class="move-button jump-button" data-move="jump" aria-label="Jump">JUMP</button>
-                <button class="move-button stop-button" data-move="stop" aria-label="Stop">STOP</button>
+                <button class="move-button jump-button"  data-move="jump"        aria-label="Jump">JUMP</button>
+                <button class="move-button stop-button"  data-move="stop"        aria-label="Stop">STOP</button>
                 <button class="move-button click-button" data-action="left_click">HIT NPC</button>
                 <button class="move-button click-button" data-action="right_click">TALK NPC</button>
               </div>
             </section>
-
-            <section class="controller-chat glass-panel inner-panel">
-              <h3>Chat System</h3>
-              <div id="chatMessages" class="chat-messages"></div>
-              <form id="chatForm" class="chat-form">
-                <input id="chatInput" autocomplete="off" placeholder="follow me / collect food / hello world">
-                <button id="chatSend" type="submit">Send</button>
-              </form>
-            </section>
           </div>
         </div>
 
-        <div class="card wide glass-panel command-panel">
+        <!-- Commands Panel -->
+        <div class="card wide glass-panel command-panel" id="panel-commands">
           <div class="panel-title-row">
             <p class="eyebrow">COMMAND SHORTCUTS</p>
             <span class="pulse-dot"></span>
@@ -184,12 +251,13 @@
           </div>
         </div>
 
-        <div class="card wide glass-panel ai-brain-panel">
+        <!-- AI Brain Panel -->
+        <div class="card wide glass-panel ai-brain-panel" id="panel-ai">
           <div class="panel-title-row">
             <p class="eyebrow">AI BRAIN</p>
             <div class="ai-provider-badge" id="aiProviderBadge" data-state="unknown">
               <span class="ai-provider-dot" id="aiProviderDot"></span>
-              <span id="aiProviderLabel">Checking…</span>
+              <span id="aiProviderLabel">Checking&#x2026;</span>
             </div>
           </div>
           <h2>LLM Goal Planner</h2>
@@ -222,6 +290,7 @@
           </div>
         </div>
 
+        <!-- AI Decision Panel -->
         <div class="card wide glass-panel decision-panel">
           <div class="panel-title-row">
             <p class="eyebrow">AI CORE</p>
@@ -232,166 +301,8 @@
 reason: waiting</pre>
         </div>
 
-        <div class="card wide glass-panel config-panel">
-          <div class="panel-title-row">
-            <p class="eyebrow">ACTIVE CONFIGURATION</p>
-            <span class="pulse-dot cyan"></span>
-          </div>
-          <div class="config-header-row">
-            <h2>Live Config</h2>
-            <button id="refreshConfig" class="config-refresh-btn">Refresh</button>
-          </div>
-          <p class="chat-help">Values read from environment at startup. Click Refresh after changing env vars.</p>
-          <div class="config-groups">
-            <div class="config-group">
-              <p class="config-group-label">AI ENGINE</p>
-              <dl class="config-stats">
-                <div><dt>Tick Rate</dt><dd id="cfg-tickMs">-</dd></div>
-                <div><dt>Mob Scan</dt><dd id="cfg-mobScanMs">-</dd></div>
-                <div><dt>Ore Scan</dt><dd id="cfg-oreScanMs">-</dd></div>
-                <div><dt>CPU Limit</dt><dd id="cfg-cpuLimit">-</dd></div>
-              </dl>
-            </div>
-            <div class="config-group">
-              <p class="config-group-label">SAFETY</p>
-              <dl class="config-stats">
-                <div><dt>Danger Range</dt><dd id="cfg-dangerRange">-</dd></div>
-                <div><dt>Danger CD</dt><dd id="cfg-dangerActionMs">-</dd></div>
-              </dl>
-            </div>
-            <div class="config-group">
-              <p class="config-group-label">COMMANDS & SURVIVAL</p>
-              <dl class="config-stats">
-                <div><dt>Cmd Cooldown</dt><dd id="cfg-cmdCooldown">-</dd></div>
-                <div><dt>Survival</dt><dd id="cfg-survivalMs">-</dd></div>
-                <div><dt>Resource</dt><dd id="cfg-resourceMs">-</dd></div>
-              </dl>
-            </div>
-            <div class="config-group">
-              <p class="config-group-label">SYSTEM</p>
-              <dl class="config-stats">
-                <div><dt>Mem Limit</dt><dd id="cfg-maxMemMb">-</dd></div>
-                <div><dt>Max Restarts</dt><dd id="cfg-maxRestarts">-</dd></div>
-                <div><dt>Mem Cleanup</dt><dd id="cfg-memCleanupMs">-</dd></div>
-                <div><dt>Auto Cleanup</dt><dd id="cfg-autoCleanupMs">-</dd></div>
-              </dl>
-            </div>
-          </div>
-        </div>
-
-        <div class="card wide glass-panel inventory-panel">
-          <div class="panel-title-row">
-            <p class="eyebrow">STORAGE</p>
-            <span class="pulse-dot cyan"></span>
-          </div>
-          <div class="inv-header-row">
-            <h2>Bot Inventory</h2>
-            <span id="invItemCount" class="inv-item-count">—</span>
-          </div>
-          <div id="invOfflineMsg" class="inv-offline-msg">BOT OFFLINE — Connect the bot to view inventory</div>
-          <div id="invContainer" class="inv-container inv-hidden">
-            <div class="inv-section">
-              <p class="inv-section-label">ARMOR</p>
-              <div id="invArmor" class="inv-armor-row"></div>
-            </div>
-            <div class="inv-section">
-              <p class="inv-section-label">MAIN INVENTORY</p>
-              <div id="invMain" class="inv-grid"></div>
-            </div>
-            <div class="inv-section inv-bottom-section">
-              <div>
-                <p class="inv-section-label">HOTBAR</p>
-                <div id="invHotbar" class="inv-grid inv-hotbar-grid"></div>
-              </div>
-              <div>
-                <p class="inv-section-label">OFFHAND</p>
-                <div id="invOffhand" class="inv-grid"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card wide glass-panel waypoints-panel">
-          <div class="panel-title-row">
-            <p class="eyebrow">PERSISTENCE</p>
-            <span class="pulse-dot cyan"></span>
-          </div>
-          <div class="wp-header-row">
-            <h2>Waypoints</h2>
-            <span id="wpStatus" class="wp-status">—</span>
-          </div>
-          <p class="chat-help">Save the bot's current coordinates as a named waypoint. Stored persistently in MongoDB.</p>
-          <div class="control-row wp-input-row">
-            <input id="wpName" placeholder="Waypoint name (a-z, 0-9, _, -)" maxlength="32" autocomplete="off">
-            <button id="wpSetBtn" class="wp-set-btn">Set Current Position</button>
-            <button id="wpRefreshBtn" class="wp-refresh-btn">Refresh</button>
-          </div>
-          <div id="wpError" class="wp-error" style="display:none"></div>
-          <div id="wpList" class="wp-list">
-            <div class="wp-empty">No waypoints loaded yet.</div>
-          </div>
-        </div>
-
-        <div class="card wide glass-panel deaths-panel">
-          <div class="panel-title-row">
-            <p class="eyebrow">MORTALITY LOG</p>
-            <span class="pulse-dot red"></span>
-          </div>
-          <div class="wp-header-row">
-            <h2>Death Log</h2>
-            <span id="deathCount" class="wp-status">—</span>
-          </div>
-          <p class="chat-help">Death coordinates are saved to MongoDB. On respawn the bot auto-navigates back to collect dropped items.</p>
-          <div class="control-row">
-            <button id="deathRefreshBtn" class="wp-refresh-btn">Refresh</button>
-          </div>
-          <div id="deathList" class="death-list">
-            <div class="wp-empty">No deaths recorded yet.</div>
-          </div>
-        </div>
-
-        <div class="card wide glass-panel diagnostics-panel">
-          <div class="panel-title-row">
-            <p class="eyebrow">NETWORK</p>
-            <span class="pulse-dot cyan"></span>
-          </div>
-          <h2>Connection Diagnostics</h2>
-          <p class="chat-help">Test DNS resolution, TCP reachability, and round-trip latency to any server.</p>
-          <div class="control-row diag-input-row">
-            <input id="diagHost" placeholder="Server host / IP (e.g. mc.hypixel.net)">
-            <input id="diagPort" placeholder="Port (default 25565)" type="number" class="diag-port-input">
-            <button id="runDiagnostics" class="diag-run-btn">Run Diagnostics</button>
-          </div>
-          <div id="diagLog" class="diag-log">
-            <div class="diag-idle">Awaiting diagnostics…</div>
-          </div>
-
-          <div class="proxy-divider">
-            <span>SOCKS5 PROXY TEST</span>
-          </div>
-          <p class="chat-help">Verify a SOCKS5 proxy is reachable and can tunnel to the target before connecting the bot through it.</p>
-          <div class="control-row diag-input-row">
-            <input id="proxyTestUrl" placeholder="socks5://user:pass@host:port" autocomplete="off" class="proxy-url-input">
-            <input id="proxyTestDest" placeholder="Destination host (default: google.com)" class="proxy-dest-input">
-            <input id="proxyTestPort" placeholder="Port (default: 80)" type="number" class="diag-port-input">
-            <button id="testProxy" class="proxy-test-btn">Test Proxy</button>
-          </div>
-          <div id="proxyLog" class="diag-log proxy-log">
-            <div class="diag-idle">Awaiting proxy test…</div>
-          </div>
-        </div>
-
-        <div class="card wide glass-panel logs-panel">
-          <div class="panel-title-row">
-            <p class="eyebrow">EVENT STREAM</p>
-            <span class="pulse-dot"></span>
-          </div>
-          <h2>Logs</h2>
-          <div id="logs" class="logs"></div>
-        </div>
-
-        <!-- ── Fleet Manager Panel ──────────────────────────────────────── -->
-        <div class="card wide glass-panel fleet-panel">
+        <!-- Fleet Manager Panel -->
+        <div class="card wide glass-panel fleet-panel" id="panel-fleet">
           <div class="panel-title-row">
             <p class="eyebrow">BOT ARMY</p>
             <span class="pulse-dot cyan"></span>
@@ -438,8 +349,8 @@ reason: waiting</pre>
           </div>
         </div>
 
-        <!-- ── Hive Mind Panel ───────────────────────────────────────── -->
-        <div class="card wide glass-panel hive-panel">
+        <!-- Hive Mind Panel -->
+        <div class="card wide glass-panel hive-panel" id="panel-hive">
           <div class="panel-title-row">
             <p class="eyebrow">COLLECTIVE INTELLIGENCE</p>
             <span class="pulse-dot green"></span>
@@ -455,53 +366,41 @@ reason: waiting</pre>
           <p class="chat-help">Shared brain across all fleet bots. Collective memory, real-time resource pool, danger zone registry and intel feed.</p>
 
           <div class="hive-grid">
-
-            <!-- Bot roster -->
             <div class="hive-section hive-roster-section">
               <p class="hive-section-label">FLEET ROSTER</p>
               <div id="hiveRoster" class="hive-roster">
                 <div class="hive-empty">No bots linked to Hive yet.</div>
               </div>
             </div>
-
-            <!-- Resource pool -->
             <div class="hive-section hive-pool-section">
               <p class="hive-section-label">COLLECTIVE POOL <span class="hive-section-sub">aggregated inventory</span></p>
               <div id="hivePool" class="hive-pool-grid">
                 <div class="hive-empty">No inventory data yet.</div>
               </div>
             </div>
-
-            <!-- Known enemies -->
             <div class="hive-section hive-enemies-section">
               <p class="hive-section-label">KNOWN THREATS</p>
               <div id="hiveEnemies" class="hive-enemies-list">
                 <div class="hive-empty">No threats tracked.</div>
               </div>
             </div>
-
-            <!-- Intel feed -->
             <div class="hive-section hive-intel-section">
               <p class="hive-section-label">INTEL FEED <span class="hive-section-sub">live</span></p>
               <div id="hiveIntelFeed" class="hive-intel-feed"></div>
             </div>
-
-            <!-- Survival v2 overview -->
             <div class="hive-section hive-survival-section">
               <p class="hive-section-label">SURVIVAL STATUS <span class="hive-section-sub">autonomous survival v2</span></p>
               <div id="hiveSurvivalGrid" class="hive-survival-grid">
                 <div class="hive-empty">No bots active.</div>
               </div>
             </div>
-
           </div>
 
-          <!-- Manual controls -->
           <div class="hive-controls">
             <p class="hive-section-label">MANUAL CONTROLS</p>
             <div class="control-row hive-control-row">
               <button id="hiveBroadcastBtn" class="hive-btn">Broadcast Alert</button>
-              <input id="hiveBroadcastInput" class="hive-input" placeholder="Alert message…" maxlength="120" autocomplete="off">
+              <input id="hiveBroadcastInput" class="hive-input" placeholder="Alert message&#x2026;" maxlength="120" autocomplete="off">
             </div>
             <div class="control-row hive-control-row">
               <input id="hiveDangerX" class="hive-coord-input" placeholder="X" type="number">
@@ -513,8 +412,161 @@ reason: waiting</pre>
           </div>
         </div>
 
-        <!-- ── Schematic Lab Panel ────────────────────────────────────── -->
-        <div class="card wide glass-panel schematic-lab-panel">
+        <!-- Inventory Panel -->
+        <div class="card wide glass-panel inventory-panel" id="panel-inventory">
+          <div class="panel-title-row">
+            <p class="eyebrow">STORAGE</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <div class="inv-header-row">
+            <h2>Bot Inventory</h2>
+            <span id="invItemCount" class="inv-item-count">—</span>
+          </div>
+          <div id="invOfflineMsg" class="inv-offline-msg">BOT OFFLINE — Connect the bot to view inventory</div>
+          <div id="invContainer" class="inv-container inv-hidden">
+            <div class="inv-section">
+              <p class="inv-section-label">ARMOR</p>
+              <div id="invArmor" class="inv-armor-row"></div>
+            </div>
+            <div class="inv-section">
+              <p class="inv-section-label">MAIN INVENTORY</p>
+              <div id="invMain" class="inv-grid"></div>
+            </div>
+            <div class="inv-section inv-bottom-section">
+              <div>
+                <p class="inv-section-label">HOTBAR</p>
+                <div id="invHotbar" class="inv-grid inv-hotbar-grid"></div>
+              </div>
+              <div>
+                <p class="inv-section-label">OFFHAND</p>
+                <div id="invOffhand" class="inv-grid"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Waypoints Panel -->
+        <div class="card wide glass-panel waypoints-panel" id="panel-waypoints">
+          <div class="panel-title-row">
+            <p class="eyebrow">PERSISTENCE</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <div class="wp-header-row">
+            <h2>Waypoints</h2>
+            <span id="wpStatus" class="wp-status">—</span>
+          </div>
+          <p class="chat-help">Save the bot's current coordinates as a named waypoint. Stored persistently in MongoDB.</p>
+          <div class="control-row wp-input-row">
+            <input id="wpName" placeholder="Waypoint name (a-z, 0-9, _, -)" maxlength="32" autocomplete="off">
+            <button id="wpSetBtn" class="wp-set-btn">Set Current Position</button>
+            <button id="wpRefreshBtn" class="wp-refresh-btn">Refresh</button>
+          </div>
+          <div id="wpError" class="wp-error" style="display:none"></div>
+          <div id="wpList" class="wp-list">
+            <div class="wp-empty">No waypoints loaded yet.</div>
+          </div>
+        </div>
+
+        <!-- Deaths Panel -->
+        <div class="card wide glass-panel deaths-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">MORTALITY LOG</p>
+            <span class="pulse-dot red"></span>
+          </div>
+          <div class="wp-header-row">
+            <h2>Death Log</h2>
+            <span id="deathCount" class="wp-status">—</span>
+          </div>
+          <p class="chat-help">Death coordinates are saved to MongoDB. On respawn the bot auto-navigates back to collect dropped items.</p>
+          <div class="control-row">
+            <button id="deathRefreshBtn" class="wp-refresh-btn">Refresh</button>
+          </div>
+          <div id="deathList" class="death-list">
+            <div class="wp-empty">No deaths recorded yet.</div>
+          </div>
+        </div>
+
+        <!-- Diagnostics Panel -->
+        <div class="card wide glass-panel diagnostics-panel" id="panel-diagnostics">
+          <div class="panel-title-row">
+            <p class="eyebrow">NETWORK</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <h2>Connection Diagnostics</h2>
+          <p class="chat-help">Test DNS resolution, TCP reachability, and round-trip latency to any server.</p>
+          <div class="control-row diag-input-row">
+            <input id="diagHost" placeholder="Server host / IP (e.g. mc.hypixel.net)">
+            <input id="diagPort" placeholder="Port (default 25565)" type="number" class="diag-port-input">
+            <button id="runDiagnostics" class="diag-run-btn">Run Diagnostics</button>
+          </div>
+          <div id="diagLog" class="diag-log">
+            <div class="diag-idle">Awaiting diagnostics&#x2026;</div>
+          </div>
+          <div class="proxy-divider">
+            <span>SOCKS5 PROXY TEST</span>
+          </div>
+          <p class="chat-help">Verify a SOCKS5 proxy is reachable and can tunnel to the target before connecting the bot through it.</p>
+          <div class="control-row diag-input-row">
+            <input id="proxyTestUrl" placeholder="socks5://user:pass@host:port" autocomplete="off" class="proxy-url-input">
+            <input id="proxyTestDest" placeholder="Destination host (default: google.com)" class="proxy-dest-input">
+            <input id="proxyTestPort" placeholder="Port (default: 80)" type="number" class="diag-port-input">
+            <button id="testProxy" class="proxy-test-btn">Test Proxy</button>
+          </div>
+          <div id="proxyLog" class="diag-log proxy-log">
+            <div class="diag-idle">Awaiting proxy test&#x2026;</div>
+          </div>
+        </div>
+
+        <!-- Config Panel -->
+        <div class="card wide glass-panel config-panel" id="panel-config">
+          <div class="panel-title-row">
+            <p class="eyebrow">ACTIVE CONFIGURATION</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <div class="config-header-row">
+            <h2>Live Config</h2>
+            <button id="refreshConfig" class="config-refresh-btn">Refresh</button>
+          </div>
+          <p class="chat-help">Values read from environment at startup. Click Refresh after changing env vars.</p>
+          <div class="config-groups">
+            <div class="config-group">
+              <p class="config-group-label">AI ENGINE</p>
+              <dl class="config-stats">
+                <div><dt>Tick Rate</dt><dd id="cfg-tickMs">-</dd></div>
+                <div><dt>Mob Scan</dt><dd id="cfg-mobScanMs">-</dd></div>
+                <div><dt>Ore Scan</dt><dd id="cfg-oreScanMs">-</dd></div>
+                <div><dt>CPU Limit</dt><dd id="cfg-cpuLimit">-</dd></div>
+              </dl>
+            </div>
+            <div class="config-group">
+              <p class="config-group-label">SAFETY</p>
+              <dl class="config-stats">
+                <div><dt>Danger Range</dt><dd id="cfg-dangerRange">-</dd></div>
+                <div><dt>Danger CD</dt><dd id="cfg-dangerActionMs">-</dd></div>
+              </dl>
+            </div>
+            <div class="config-group">
+              <p class="config-group-label">COMMANDS &amp; SURVIVAL</p>
+              <dl class="config-stats">
+                <div><dt>Cmd Cooldown</dt><dd id="cfg-cmdCooldown">-</dd></div>
+                <div><dt>Survival</dt><dd id="cfg-survivalMs">-</dd></div>
+                <div><dt>Resource</dt><dd id="cfg-resourceMs">-</dd></div>
+              </dl>
+            </div>
+            <div class="config-group">
+              <p class="config-group-label">SYSTEM</p>
+              <dl class="config-stats">
+                <div><dt>Mem Limit</dt><dd id="cfg-maxMemMb">-</dd></div>
+                <div><dt>Max Restarts</dt><dd id="cfg-maxRestarts">-</dd></div>
+                <div><dt>Mem Cleanup</dt><dd id="cfg-memCleanupMs">-</dd></div>
+                <div><dt>Auto Cleanup</dt><dd id="cfg-autoCleanupMs">-</dd></div>
+              </dl>
+            </div>
+          </div>
+        </div>
+
+        <!-- Schematic Lab Panel -->
+        <div class="card wide glass-panel schematic-lab-panel" id="panel-schematic">
           <div class="panel-title-row">
             <p class="eyebrow">BUILDER'S LAB</p>
             <span class="pulse-dot cyan"></span>
@@ -524,27 +576,25 @@ reason: waiting</pre>
             <span id="schematicLabCount" class="schematic-lab-count">0 saved</span>
           </div>
           <p class="chat-help">Paste custom schematic JSON, preview block requirements, then deploy across the fleet.</p>
-
           <div class="schematic-input-section">
             <div class="control-row">
               <input id="schematicNameInput" placeholder="Schematic name (e.g. my_wall)" class="schematic-name-input" autocomplete="off" maxlength="48">
             </div>
-            <textarea id="schematicJsonInput" class="schematic-json-input" placeholder='Paste JSON schematic here…&#10;&#10;Format: { "name": "my_build", "relative": true, "blocks": [ { "dx": 0, "dy": 0, "dz": 0, "type": "oak_planks" }, … ] }'></textarea>
+            <textarea id="schematicJsonInput" class="schematic-json-input" placeholder="Paste JSON schematic here&#x2026;&#10;&#10;Format: { &quot;name&quot;: &quot;my_build&quot;, &quot;relative&quot;: true, &quot;blocks&quot;: [ { &quot;dx&quot;: 0, &quot;dy&quot;: 0, &quot;dz&quot;: 0, &quot;type&quot;: &quot;oak_planks&quot; }, &#x2026; ] }"></textarea>
             <div class="control-row schematic-action-row">
               <button id="schematicPreviewBtn" class="schematic-action-btn preview">Preview</button>
               <button id="schematicSaveBtn" class="schematic-action-btn save">Save to Lab</button>
             </div>
           </div>
-
           <div id="schematicPreviewPanel" class="schematic-preview-panel" style="display:none">
             <div id="schematicPreviewInfo"></div>
           </div>
-
           <div id="schematicLabList" class="schematic-lab-list">
             <div class="schematic-lab-empty">No schematics saved yet. Paste JSON above and click Save to Lab.</div>
           </div>
         </div>
 
+        <!-- Role Panel -->
         <div id="rolePanel" class="card wide glass-panel role-panel" style="display:none">
           <div class="panel-title-row">
             <p class="eyebrow">ACCESS CONTROL</p>
@@ -555,7 +605,6 @@ reason: waiting</pre>
             <button id="refreshRoles" class="config-refresh-btn">Refresh</button>
           </div>
           <p class="chat-help">Manage who can control the bot. Changes take effect immediately without a restart.</p>
-
           <div class="role-groups">
             <div class="role-group">
               <p class="role-group-label owner-label">OWNER</p>
@@ -570,7 +619,6 @@ reason: waiting</pre>
               <div id="roleManagerList" class="role-list"></div>
             </div>
           </div>
-
           <div class="role-add-form glass-panel inner-panel">
             <h3>Add User</h3>
             <div class="control-row role-add-row">
@@ -588,7 +636,36 @@ reason: waiting</pre>
             <p id="roleAddMsg" class="role-add-msg"></p>
           </div>
         </div>
-      </section>
+
+      </div><!-- /.main-scroll -->
+
+      <!-- ── Right Panel: Logs + Chat ───────────────────────────────────── -->
+      <aside class="right-panel">
+
+        <div class="card glass-panel logs-panel right-logs-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">EVENT STREAM</p>
+            <span class="pulse-dot"></span>
+          </div>
+          <h2>Logs</h2>
+          <div id="logs" class="logs"></div>
+        </div>
+
+        <div class="card glass-panel right-chat-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">CHAT SYSTEM</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <h2>Live Chat</h2>
+          <div id="chatMessages" class="chat-messages"></div>
+          <form id="chatForm" class="chat-form">
+            <input id="chatInput" autocomplete="off" placeholder="follow me / collect food / hello world">
+            <button id="chatSend" type="submit">Send</button>
+          </form>
+        </div>
+
+      </aside>
+
     </main>
 
     <div id="confirmModal" class="confirm-modal-overlay" style="display:none">

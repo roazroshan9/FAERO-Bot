@@ -1902,3 +1902,309 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
   loadSchematics();
   setInterval(function () { if (!document.hidden) loadSchematics(); }, 30000);
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FAERO UI v2 — Progress Bars · Radar · Formation · Macros · Sidebar Toggle
+// ═══════════════════════════════════════════════════════════════════════════
+(function () {
+  'use strict';
+
+  // ── Vital-sign progress bars ────────────────────────────────────────────
+  var healthBar = document.getElementById('healthBar');
+  var hungerBar = document.getElementById('hungerBar');
+
+  function updateVitalBar(barEl, value, max) {
+    if (!barEl) return;
+    var pct = Math.max(0, Math.min(100, (value / max) * 100));
+    barEl.style.width = pct.toFixed(1) + '%';
+    // Health colour tiers
+    if (barEl === healthBar) {
+      barEl.classList.toggle('high', pct > 60);
+      barEl.classList.toggle('mid',  pct > 25 && pct <= 60);
+      barEl.classList.toggle('low',  pct <= 25);
+    }
+    // Hunger colour tiers
+    if (barEl === hungerBar) {
+      barEl.classList.toggle('high', pct > 55);
+      barEl.classList.toggle('mid',  pct > 25 && pct <= 55);
+      barEl.classList.toggle('low',  pct <= 25);
+    }
+  }
+
+  // Intercept socket status updates to drive bars
+  if (typeof socket !== 'undefined') {
+    socket.on('status', function (data) {
+      if (!data) return;
+      // Health: max 20
+      if (data.health !== undefined && data.health !== null) {
+        var hp = parseFloat(data.health);
+        if (!isNaN(hp)) updateVitalBar(healthBar, hp, 20);
+      }
+      // Hunger/food: max 20
+      if (data.food !== undefined && data.food !== null) {
+        var food = parseFloat(data.food);
+        if (!isNaN(food)) updateVitalBar(hungerBar, food, 20);
+      } else if (data.hunger !== undefined && data.hunger !== null) {
+        var hunger = parseFloat(data.hunger);
+        if (!isNaN(hunger)) updateVitalBar(hungerBar, hunger, 20);
+      }
+    });
+  }
+
+  // Also parse text content that client.js already writes to #health/#hunger
+  var healthEl = document.getElementById('health');
+  var hungerEl = document.getElementById('hunger');
+
+  function observeTextEl(el, barEl, max) {
+    if (!el || !barEl) return;
+    var observer = new MutationObserver(function () {
+      var txt = (el.textContent || '').replace(/[^0-9.]/g, '').trim();
+      var val = parseFloat(txt);
+      if (!isNaN(val)) updateVitalBar(barEl, val, max);
+    });
+    observer.observe(el, { childList: true, subtree: true, characterData: true });
+  }
+
+  observeTextEl(healthEl, healthBar, 20);
+  observeTextEl(hungerEl, hungerBar, 20);
+
+  // ── Fleet Radar Canvas ──────────────────────────────────────────────────
+  var radarCanvas = document.getElementById('radarCanvas');
+  var radarCtx = radarCanvas ? radarCanvas.getContext('2d') : null;
+  var _radarData = { leader: null, minions: [] };
+  var RADAR_RANGE = 128; // blocks radius shown on radar
+
+  function drawRadar(leaderPos, minionPositions) {
+    if (!radarCtx) return;
+    var W = radarCanvas.width;
+    var H = radarCanvas.height;
+    var cx = W / 2;
+    var cy = H / 2;
+    var r  = W / 2 - 2;
+
+    radarCtx.clearRect(0, 0, W, H);
+
+    // Background circle
+    radarCtx.save();
+    radarCtx.beginPath();
+    radarCtx.arc(cx, cy, r, 0, Math.PI * 2);
+    radarCtx.fillStyle = 'rgba(0, 10, 12, 0.88)';
+    radarCtx.fill();
+    radarCtx.clip();
+
+    // Grid rings
+    radarCtx.strokeStyle = 'rgba(0,255,255,0.10)';
+    radarCtx.lineWidth = 1;
+    [0.25, 0.5, 0.75, 1.0].forEach(function (frac) {
+      radarCtx.beginPath();
+      radarCtx.arc(cx, cy, r * frac, 0, Math.PI * 2);
+      radarCtx.stroke();
+    });
+
+    // Sweep line (rotating)
+    var angle = (Date.now() / 2200) * Math.PI * 2;
+    var grad = radarCtx.createConicalGradient
+      ? null
+      : null;
+    radarCtx.save();
+    radarCtx.translate(cx, cy);
+    radarCtx.rotate(angle);
+    var sweepGrad = radarCtx.createLinearGradient(0, 0, r, 0);
+    sweepGrad.addColorStop(0, 'rgba(0,255,255,0.45)');
+    sweepGrad.addColorStop(1, 'rgba(0,255,255,0)');
+    radarCtx.beginPath();
+    radarCtx.moveTo(0, 0);
+    radarCtx.arc(0, 0, r, -0.18, 0.18);
+    radarCtx.closePath();
+    radarCtx.fillStyle = sweepGrad;
+    radarCtx.fill();
+    radarCtx.restore();
+
+    function worldToRadar(dx, dz) {
+      var px = cx + (dx / RADAR_RANGE) * r;
+      var py = cy + (dz / RADAR_RANGE) * r;
+      return { x: px, y: py };
+    }
+
+    // Minions
+    minionPositions.forEach(function (pos) {
+      if (!leaderPos || !pos) return;
+      var dx = pos.x - leaderPos.x;
+      var dz = pos.z - leaderPos.z;
+      var p = worldToRadar(dx, dz);
+      if (p.x < 2 || p.x > W - 2 || p.y < 2 || p.y > H - 2) return;
+      radarCtx.beginPath();
+      radarCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      radarCtx.fillStyle = '#00ffff';
+      radarCtx.shadowColor = '#00ffff';
+      radarCtx.shadowBlur = 8;
+      radarCtx.fill();
+      radarCtx.shadowBlur = 0;
+    });
+
+    // Leader (always center)
+    if (leaderPos) {
+      radarCtx.beginPath();
+      radarCtx.arc(cx, cy, 6, 0, Math.PI * 2);
+      radarCtx.fillStyle = '#39FF14';
+      radarCtx.shadowColor = '#39FF14';
+      radarCtx.shadowBlur = 12;
+      radarCtx.fill();
+      radarCtx.shadowBlur = 0;
+    }
+
+    radarCtx.restore();
+  }
+
+  function parsePosition(posStr) {
+    if (!posStr || typeof posStr !== 'string') return null;
+    var parts = posStr.match(/-?\d+(\.\d+)?/g);
+    if (!parts || parts.length < 3) return null;
+    return { x: parseFloat(parts[0]), y: parseFloat(parts[1]), z: parseFloat(parts[2]) };
+  }
+
+  async function fetchRadarData() {
+    try {
+      var r = await fetch('/bot-api/fleet/status', { cache: 'no-store' });
+      if (r.ok) {
+        var d = await r.json();
+        var minions = [];
+        (d.bots || []).forEach(function (b) {
+          if (b.position) {
+            var p = typeof b.position === 'string' ? parsePosition(b.position) : b.position;
+            if (p) minions.push(p);
+          }
+        });
+        _radarData.minions = minions;
+      }
+    } catch (_) {}
+    try {
+      var rs = await fetch('/bot-api/status', { cache: 'no-store' });
+      if (rs.ok) {
+        var ds = await rs.json();
+        if (ds.position) {
+          _radarData.leader = typeof ds.position === 'string'
+            ? parsePosition(ds.position)
+            : ds.position;
+        }
+      }
+    } catch (_) {}
+  }
+
+  function radarLoop() {
+    drawRadar(_radarData.leader, _radarData.minions);
+    requestAnimationFrame(radarLoop);
+  }
+
+  if (radarCtx) {
+    radarLoop();
+    fetchRadarData();
+    setInterval(function () { if (!document.hidden) fetchRadarData(); }, 3000);
+    // Also update leader position from socket
+    if (typeof socket !== 'undefined') {
+      socket.on('status', function (data) {
+        if (data && data.position) {
+          var p = typeof data.position === 'string'
+            ? parsePosition(data.position)
+            : data.position;
+          if (p) _radarData.leader = p;
+        }
+      });
+    }
+  }
+
+  // ── Formation toggle buttons ────────────────────────────────────────────
+  var formationBtns = document.querySelectorAll('.formation-btn[data-formation]');
+
+  formationBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var formation = btn.dataset.formation;
+      // Visual: mark active
+      formationBtns.forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      // Emit fleet formation command
+      if (typeof socket !== 'undefined') {
+        socket.emit('fleet:command', { command: 'formation', formation: formation });
+      }
+      // Also call REST endpoint
+      fetch('/bot-api/tactical/formation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ formation: formation })
+      }).catch(function () {});
+    });
+  });
+
+  // ── Macro buttons ───────────────────────────────────────────────────────
+  var macroRetreatBtn = document.getElementById('macroRetreat');
+  var macroEngageBtn  = document.getElementById('macroEngage');
+  var macroRtbBtn     = document.getElementById('macroRtb');
+
+  function emitFleetCmd(command, extra) {
+    if (typeof socket !== 'undefined') {
+      socket.emit('fleet:command', Object.assign({ command: command }, extra || {}));
+    }
+  }
+
+  function flashBtn(btn, ms) {
+    if (!btn) return;
+    btn.disabled = true;
+    setTimeout(function () { btn.disabled = false; }, ms || 1200);
+  }
+
+  if (macroRetreatBtn) {
+    macroRetreatBtn.addEventListener('click', function () {
+      emitFleetCmd('abort');
+      emitFleetCmd('stop');
+      fetch('/bot-api/tactical/abort', { method: 'POST' }).catch(function () {});
+      flashBtn(macroRetreatBtn, 2000);
+      if (typeof appendLog === 'function') {
+        appendLog({ at: new Date().toISOString(), message: '[MACRO] Emergency Retreat — all bots aborting combat' });
+      }
+    });
+  }
+
+  if (macroEngageBtn) {
+    macroEngageBtn.addEventListener('click', function () {
+      fetch('/bot-api/tactical/engage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      }).catch(function () {});
+      emitFleetCmd('engage');
+      flashBtn(macroEngageBtn, 1500);
+      if (typeof appendLog === 'function') {
+        appendLog({ at: new Date().toISOString(), message: '[MACRO] Engage All — fleet entering combat' });
+      }
+    });
+  }
+
+  if (macroRtbBtn) {
+    macroRtbBtn.addEventListener('click', function () {
+      emitFleetCmd('follow');
+      flashBtn(macroRtbBtn, 1500);
+      if (typeof appendLog === 'function') {
+        appendLog({ at: new Date().toISOString(), message: '[MACRO] Return to Base — all bots following leader' });
+      }
+    });
+  }
+
+  // ── Sidebar mobile toggle ───────────────────────────────────────────────
+  var sidebarToggle = document.getElementById('sidebarToggle');
+  var sidebar       = document.getElementById('sidebar');
+
+  if (sidebarToggle && sidebar) {
+    sidebarToggle.addEventListener('click', function () {
+      sidebar.classList.toggle('open');
+    });
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', function (e) {
+      if (sidebar.classList.contains('open') &&
+          !sidebar.contains(e.target) &&
+          e.target !== sidebarToggle) {
+        sidebar.classList.remove('open');
+      }
+    });
+  }
+
+})();

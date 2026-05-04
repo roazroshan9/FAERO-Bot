@@ -13,7 +13,7 @@ I want to interact with the bot through a web control panel or Discord commands.
 The project is structured as a pnpm monorepo with Node.js 24 and TypeScript 5.9. The core of FAERO is a CommonJS JavaScript bot built with Mineflayer.
 
 **UI/UX Decisions:**
-The web control panel features a cyberpunk glassmorphism UI with neon accents, scanlines, glowing status indicators, and animated logs. It includes movement controls, chat, and visible AI state readouts.
+The web control panel features a professional three-column CSS Grid layout (240px sidebar | flex main scroll | 300px right panel) with a fixed 54px topbar. Uses Rajdhani (headings), Share Tech Mono (data), and JetBrains Mono (code). Includes animated HP/Hunger progress bars with colour tiers, an HTML5 Canvas fleet radar/mini-map with a rotating sweep line, an Action Hub with Wedge/Pincer/Shield Wall formation toggles, macro buttons (Emergency Retreat, Engage All, Return to Base), and responsive mobile collapse with a hamburger sidebar toggle. Logs and Chat are permanently docked in the right panel. All panels in the main scroll area. Previously a single-column vertical stack; fully redesigned in `web/public/index.html` (new grid HTML), `web/public/style.css` (new layout CSS appended), and `web/public/client.js` (new JS appended — radar canvas, progress bar MutationObserver, formation/macro socket handlers).
 
 **Technical Implementations:**
 
