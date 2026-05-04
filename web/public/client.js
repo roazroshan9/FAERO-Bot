@@ -235,39 +235,51 @@ document.addEventListener('visibilitychange', () => {
 });
 
 async function unlockPanel() {
-  if (els.passInput.value === 'FaeroFTR') {
-    _userIdentity = (document.getElementById('identity-input').value || '').trim();
-    els.lockScreen.classList.add('hidden');
-    els.mainContent.classList.add('unlocked');
-    els.passInput.value = '';
-    document.getElementById('identity-input').value = '';
-    els.errorMsg.classList.remove('visible');
-    panelUnlocked = true;
-    startRuntimeMetrics();
-    startStatusRefresh();
-    fetchConfig();
-    if (_userIdentity) {
-      try {
-        const res = await fetch('/bot-api/roles/tier?id=' + encodeURIComponent(_userIdentity), { cache: 'no-store' });
-        const data = await res.json();
-        _userTier = data.tier || 0;
-      } catch (_e) {
-        _userTier = 0;
+  const key = els.passInput.value;
+  try {
+    const res = await fetch('/bot-api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _userIdentity = (document.getElementById('identity-input').value || '').trim();
+      els.lockScreen.classList.add('hidden');
+      els.mainContent.classList.add('unlocked');
+      els.passInput.value = '';
+      document.getElementById('identity-input').value = '';
+      els.errorMsg.classList.remove('visible');
+      panelUnlocked = true;
+      startRuntimeMetrics();
+      startStatusRefresh();
+      fetchConfig();
+      if (_userIdentity) {
+        try {
+          const tierRes = await fetch('/bot-api/roles/tier?id=' + encodeURIComponent(_userIdentity), { cache: 'no-store' });
+          const tierData = await tierRes.json();
+          _userTier = tierData.tier || 0;
+        } catch (_e) {
+          _userTier = 0;
+        }
       }
+      const rolePanel = document.getElementById('rolePanel');
+      if (_userTier >= TIER_ADMIN && rolePanel) {
+        rolePanel.style.display = '';
+        fetchRoles();
+      }
+    } else {
+      els.errorMsg.classList.add('visible');
+      els.passInput.value = '';
+      const lockBox = document.querySelector('.lock-box');
+      lockBox.classList.remove('shake');
+      void lockBox.offsetWidth;
+      lockBox.classList.add('shake');
+      lockBox.addEventListener('animationend', () => lockBox.classList.remove('shake'), { once: true });
     }
-    const rolePanel = document.getElementById('rolePanel');
-    if (_userTier >= TIER_ADMIN && rolePanel) {
-      rolePanel.style.display = '';
-      fetchRoles();
-    }
-  } else {
+  } catch (_err) {
     els.errorMsg.classList.add('visible');
     els.passInput.value = '';
-    const lockBox = document.querySelector('.lock-box');
-    lockBox.classList.remove('shake');
-    void lockBox.offsetWidth;
-    lockBox.classList.add('shake');
-    lockBox.addEventListener('animationend', () => lockBox.classList.remove('shake'), { once: true });
   }
 }
 

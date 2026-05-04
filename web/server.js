@@ -118,6 +118,14 @@ function mountRoutes(app, io, botManager) {
     res.json({ ok: true, uptime: Math.round(process.uptime()) });
   });
 
+  app.post('/bot-api/auth', (req, res) => {
+    const key = String((req.body && req.body.key) || '').trim();
+    if (!key) return res.status(400).json({ ok: false });
+    const expected = process.env.PANEL_PASSWORD || 'FaeroFTR';
+    if (key !== expected) return res.status(401).json({ ok: false });
+    res.json({ ok: true });
+  });
+
   app.get('/bot-api/runtime', (req, res) => {
     res.json(buildRuntimeMetrics(botManager));
   });
