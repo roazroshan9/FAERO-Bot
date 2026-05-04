@@ -58,6 +58,7 @@
           <a href="#panel-ai"          class="sidebar-link">&#x2728; AI Brain</a>
           <a href="#panel-fleet"       class="sidebar-link">&#x1F916; Fleet</a>
           <a href="#panel-hive"        class="sidebar-link">&#x1F9E0; Hive Mind</a>
+          <a href="#panel-social"      class="sidebar-link">&#x1F465; Social Intel</a>
           <a href="#panel-inventory"   class="sidebar-link">&#x1F392; Inventory</a>
           <a href="#panel-waypoints"   class="sidebar-link">&#x1F4CD; Waypoints</a>
           <a href="#panel-schematic"   class="sidebar-link">&#x1F528; Lab</a>
@@ -634,6 +635,35 @@ reason: waiting</pre>
               <button id="roleAddBtn" class="role-add-btn">Add User</button>
             </div>
             <p id="roleAddMsg" class="role-add-msg"></p>
+          </div>
+        </div>
+
+        <!-- Social Intel Panel -->
+        <div class="card wide glass-panel social-panel" id="panel-social">
+          <div class="panel-title-row">
+            <p class="eyebrow">NEURAL SOCIAL ENGINE</p>
+            <span class="pulse-dot green"></span>
+          </div>
+          <div class="social-header-row">
+            <h2>Social Intel</h2>
+            <div class="social-header-badges">
+              <span class="social-stat-badge friendly" id="socialFriendlyCount"><span id="socialFriendlyNum">0</span> FRIENDLY</span>
+              <span class="social-stat-badge neutral"  id="socialNeutralCount"><span id="socialNeutralNum">0</span> NEUTRAL</span>
+              <span class="social-stat-badge hostile"  id="socialHostileCount"><span id="socialHostileNum">0</span> HOSTILE</span>
+            </div>
+          </div>
+          <p class="chat-help">Live rapport tracking per player. Scores shift based on greetings, insults, attacks, cooperation, and gifts. Updated in real-time.</p>
+
+          <div class="social-grid" id="socialProfileGrid">
+            <div class="social-empty">No players tracked yet. The bot will start building profiles as players chat or interact in-game.</div>
+          </div>
+
+          <div class="social-feed-header">
+            <span class="social-feed-title">LIVE INTERACTION FEED</span>
+            <button class="social-refresh-btn" id="socialRefreshBtn">Refresh</button>
+          </div>
+          <div id="socialFeed" class="social-feed">
+            <div class="social-feed-empty">No interactions recorded yet.</div>
           </div>
         </div>
 

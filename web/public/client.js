@@ -1732,6 +1732,292 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
   setInterval(function () { if (!document.hidden) loadHive(); }, 10000);
 })();
 
+// ── Social Intel Dashboard ────────────────────────────────────────────────────
+(function () {
+  'use strict';
+
+  var gridEl         = document.getElementById('socialProfileGrid');
+  var feedEl         = document.getElementById('socialFeed');
+  var friendlyNumEl  = document.getElementById('socialFriendlyNum');
+  var neutralNumEl   = document.getElementById('socialNeutralNum');
+  var hostileNumEl   = document.getElementById('socialHostileNum');
+  var refreshBtn     = document.getElementById('socialRefreshBtn');
+
+  if (!gridEl) return;
+
+  var MAX_FEED  = 80;
+  var _profiles = {};   // Map username → last known profile snapshot
+  var _feed     = [];   // [{at, username, type, rapportScore, classification}]
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function fmtTime(isoStr) {
+    try {
+      var d = new Date(isoStr);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    } catch (_) { return '—'; }
+  }
+
+  function timeAgo(isoStr) {
+    if (!isoStr) return 'never';
+    var secs = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+    if (secs < 60)   return secs + 's ago';
+    if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+    return Math.floor(secs / 3600) + 'h ago';
+  }
+
+  function cls(classification) {
+    return (classification || 'neutral').toLowerCase();
+  }
+
+  // Convert rapport score -100…+100 into a bar fill (left%, width%, color)
+  function rapportBar(score) {
+    var clampedScore = Math.max(-100, Math.min(100, score || 0));
+    var pct = (clampedScore + 100) / 2; // 0..100 as percent of track
+    var left, width, color;
+    if (clampedScore >= 0) {
+      left  = 50;
+      width = pct - 50;
+      color = clampedScore > 20 ? '#39FF14' : 'var(--cyan)';
+    } else {
+      left  = pct;
+      width = 50 - pct;
+      color = clampedScore < -20 ? '#ff315f' : 'var(--cyan)';
+    }
+    return { left: left.toFixed(1) + '%', width: width.toFixed(1) + '%', color: color };
+  }
+
+  // ── Render a single profile card ──────────────────────────────────────────────
+
+  function buildCard(p) {
+    var c       = cls(p.classification);
+    var bar     = rapportBar(p.rapportScore);
+    var score   = (p.rapportScore >= 0 ? '+' : '') + (p.rapportScore || 0);
+    var seen    = timeAgo(p.lastSeen);
+    var count   = p.interactionCount || 0;
+
+    return '<div class="social-card ' + c + '" id="social-card-' + esc(p.username) + '">' +
+      '<div class="social-card-top">' +
+        '<span class="social-card-name">' + esc(p.username) + '</span>' +
+        '<span class="social-class-badge ' + c + '">' + esc(p.classification || 'NEUTRAL') + '</span>' +
+      '</div>' +
+      '<div class="social-rapport-wrap">' +
+        '<span class="social-rapport-label">RAPPORT</span>' +
+        '<div class="social-rapport-track">' +
+          '<div class="social-rapport-zero"></div>' +
+          '<div class="social-rapport-fill" style="left:' + bar.left + ';width:' + bar.width + ';background:' + bar.color + '"></div>' +
+        '</div>' +
+        '<span class="social-rapport-score ' + c + '">' + score + '</span>' +
+      '</div>' +
+      '<div class="social-card-meta">' +
+        '<span class="social-card-stat">Interactions: <strong>' + count + '</strong></span>' +
+        '<span class="social-card-stat">Last seen: <strong>' + seen + '</strong></span>' +
+        '<button class="social-card-reset" data-username="' + esc(p.username) + '">Reset</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // ── Render all profile cards ──────────────────────────────────────────────────
+
+  function renderProfiles() {
+    var keys = Object.keys(_profiles);
+    if (!keys.length) {
+      gridEl.innerHTML = '<div class="social-empty">No players tracked yet. The bot will start building profiles as players chat or interact in-game.</div>';
+      if (friendlyNumEl) friendlyNumEl.textContent = '0';
+      if (neutralNumEl)  neutralNumEl.textContent  = '0';
+      if (hostileNumEl)  hostileNumEl.textContent  = '0';
+      return;
+    }
+
+    // Sort: hostile first, then neutral, then friendly
+    var order = { HOSTILE: 0, NEUTRAL: 1, FRIENDLY: 2 };
+    keys.sort(function (a, b) {
+      return (order[_profiles[a].classification] || 1) - (order[_profiles[b].classification] || 1);
+    });
+
+    var friendly = 0, neutral = 0, hostile = 0;
+    keys.forEach(function (k) {
+      var c = _profiles[k].classification;
+      if (c === 'FRIENDLY') friendly++;
+      else if (c === 'HOSTILE') hostile++;
+      else neutral++;
+    });
+
+    if (friendlyNumEl) friendlyNumEl.textContent = friendly;
+    if (neutralNumEl)  neutralNumEl.textContent  = neutral;
+    if (hostileNumEl)  hostileNumEl.textContent  = hostile;
+
+    gridEl.innerHTML = keys.map(function (k) { return buildCard(_profiles[k]); }).join('');
+
+    // Attach reset buttons
+    gridEl.querySelectorAll('.social-card-reset').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var username = btn.dataset.username;
+        if (!username) return;
+        if (!confirm('Reset social profile for "' + username + '"?\nThis wipes rapport score and conversation history.')) return;
+        btn.disabled = true;
+        btn.textContent = 'Resetting…';
+        fetch('/bot-api/social/profile/' + encodeURIComponent(username) + '/reset', {
+          method: 'POST'
+        }).then(function () {
+          delete _profiles[username];
+          renderProfiles();
+        }).catch(function () {
+          btn.disabled = false;
+          btn.textContent = 'Reset';
+        });
+      });
+    });
+  }
+
+  // ── Update a single card in-place (for live socket updates) ─────────────────
+
+  function patchCard(p) {
+    _profiles[p.username] = Object.assign(_profiles[p.username] || {}, p);
+    var existing = document.getElementById('social-card-' + p.username);
+    if (existing) {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = buildCard(_profiles[p.username]);
+      var newCard = tmp.firstElementChild;
+      existing.replaceWith(newCard);
+      // Flash animation
+      newCard.classList.add('just-updated');
+      // Re-attach reset
+      var resetBtn = newCard.querySelector('.social-card-reset');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+          var username = resetBtn.dataset.username;
+          if (!confirm('Reset social profile for "' + username + '"?')) return;
+          resetBtn.disabled = true;
+          fetch('/bot-api/social/profile/' + encodeURIComponent(username) + '/reset', {
+            method: 'POST'
+          }).then(function () {
+            delete _profiles[username];
+            renderProfiles();
+          }).catch(function () { resetBtn.disabled = false; });
+        });
+      }
+      // Update header counters
+      var friendly = 0, neutral = 0, hostile = 0;
+      Object.values(_profiles).forEach(function (pr) {
+        if (pr.classification === 'FRIENDLY') friendly++;
+        else if (pr.classification === 'HOSTILE') hostile++;
+        else neutral++;
+      });
+      if (friendlyNumEl) friendlyNumEl.textContent = friendly;
+      if (neutralNumEl)  neutralNumEl.textContent  = neutral;
+      if (hostileNumEl)  hostileNumEl.textContent  = hostile;
+    } else {
+      // New player — full re-render
+      renderProfiles();
+    }
+  }
+
+  // ── Render interaction feed ───────────────────────────────────────────────────
+
+  function renderFeed() {
+    if (!_feed.length) {
+      feedEl.innerHTML = '<div class="social-feed-empty">No interactions recorded yet.</div>';
+      return;
+    }
+    feedEl.innerHTML = _feed.slice().reverse().map(function (e) {
+      var c = cls(e.classification);
+      var delta = '';
+      if (e.delta !== undefined) {
+        delta = (e.delta >= 0 ? '+' : '') + e.delta;
+      }
+      var score = (e.rapportScore !== undefined) ? ((e.rapportScore >= 0 ? '+' : '') + e.rapportScore) : '';
+      return '<div class="social-feed-row">' +
+        '<span class="social-feed-time">' + fmtTime(e.at) + '</span>' +
+        '<span class="social-feed-user">' + esc(e.username) + '</span>' +
+        '<span class="social-feed-type ' + esc(e.type || 'neutral_chat') + '">' + esc((e.type || 'chat').replace(/_/g,' ')) + '</span>' +
+        '<span class="social-feed-score ' + c + '">' + score + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  function pushFeedEvent(e) {
+    e.at = e.at || new Date().toISOString();
+    _feed.push(e);
+    if (_feed.length > MAX_FEED) _feed = _feed.slice(-MAX_FEED);
+
+    // Prepend to DOM (newest on top)
+    var emptyEl = feedEl.querySelector('.social-feed-empty');
+    if (emptyEl) emptyEl.remove();
+
+    var row = document.createElement('div');
+    var c   = cls(e.classification);
+    var score = (e.rapportScore !== undefined) ? ((e.rapportScore >= 0 ? '+' : '') + e.rapportScore) : '';
+    row.className = 'social-feed-row new-event';
+    row.innerHTML =
+      '<span class="social-feed-time">' + fmtTime(e.at) + '</span>' +
+      '<span class="social-feed-user">' + esc(e.username) + '</span>' +
+      '<span class="social-feed-type ' + esc(e.type || 'neutral_chat') + '">' + esc((e.type || 'chat').replace(/_/g,' ')) + '</span>' +
+      '<span class="social-feed-score ' + c + '">' + score + '</span>';
+    feedEl.insertBefore(row, feedEl.firstChild);
+
+    // Trim visible rows
+    var rows = feedEl.querySelectorAll('.social-feed-row');
+    if (rows.length > MAX_FEED) {
+      feedEl.removeChild(feedEl.lastChild);
+    }
+  }
+
+  // ── Socket.IO live events ─────────────────────────────────────────────────────
+
+  if (typeof socket !== 'undefined') {
+    socket.on('social:update', function (data) {
+      if (!data || !data.username) return;
+      var p = {
+        username:         data.username,
+        rapportScore:     data.rapportScore    !== undefined ? data.rapportScore    : (_profiles[data.username] ? _profiles[data.username].rapportScore : 0),
+        classification:   data.classification  || (_profiles[data.username] ? _profiles[data.username].classification : 'NEUTRAL'),
+        interactionCount: data.interactionCount !== undefined ? data.interactionCount : (_profiles[data.username] ? _profiles[data.username].interactionCount : 0),
+        lastSeen:         new Date().toISOString()
+      };
+      patchCard(p);
+      pushFeedEvent(Object.assign({ at: new Date().toISOString() }, data, p));
+    });
+  }
+
+  // ── REST API load ─────────────────────────────────────────────────────────────
+
+  async function loadProfiles() {
+    try {
+      var r = await fetch('/bot-api/social/profiles', { cache: 'no-store' });
+      if (!r.ok) return;
+      var body = await r.json();
+      if (!body.profiles) return;
+      _profiles = {};
+      body.profiles.forEach(function (p) { _profiles[p.username] = p; });
+      renderProfiles();
+    } catch (_) {}
+  }
+
+  // ── Refresh button ────────────────────────────────────────────────────────────
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', function () {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = 'Loading…';
+      loadProfiles().finally(function () {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = 'Refresh';
+      });
+    });
+  }
+
+  // ── Initial load + auto-refresh ───────────────────────────────────────────────
+
+  loadProfiles();
+  setInterval(function () { if (!document.hidden) loadProfiles(); }, 15000);
+
+})();
+
 // ── Schematic Lab ─────────────────────────────────────────────────────────────
 (function () {
   'use strict';
