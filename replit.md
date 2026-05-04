@@ -1,166 +1,56 @@
-# Workspace
+# Overview
 
-## Overview
+This project is a pnpm workspace monorepo utilizing TypeScript, centered around FAERO, a standalone CommonJS JavaScript AI Minecraft bot. FAERO employs a modular plugin architecture to automate various in-game tasks such as pathfinding, block collection, PvP, armor management, auto-eating, and tool selection. It also features an Express and Socket.IO-based browser control panel for management and a Discord bridge with RBAC and rate-limiting capabilities.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+The primary goal of FAERO is to provide an advanced, autonomous Minecraft AI agent capable of intelligent survival, combat, and construction within the game world. Future ambitions include developing a "Hive Mind" for collective intelligence among multiple bots, an advanced tactical combat engine, a neural social engine for improved human interaction, and an adaptive world oracle for predictive resource management and player profiling. The project aims to elevate FAERO to an elite-tier collective intelligence, offering sophisticated automation and strategic gameplay advantages.
 
-A standalone CommonJS JavaScript AI Minecraft bot (FAERO) has been added at the repository root. It uses a modular plugin architecture with Mineflayer plugins for pathfinding, block collection, PvP, armor management, auto-eating, and tool selection, plus Express and Socket.IO for a browser control panel, and a Discord bridge with RBAC and rate limiting.
+# User Preferences
 
-## FAERO Bot Architecture
+I want to interact with the bot through a web control panel or Discord commands. I expect the bot to proactively alert me about important events (e.g., bot kicked, build status). I prefer a cyberpunk-themed UI for the web control panel. I also expect the bot to manage its resources efficiently, avoid spamming notifications, and provide clear status updates on its operations.
 
-- **Plugin system**: `core/pluginLoader.js` — auto-discovers `plugins/*.plugin.js`
-- **Built-in plugins**: `plugins/ai.plugin.js`, `plugins/combat.plugin.js`, `plugins/navigation.plugin.js`
-- **Self-monitoring**: `core/monitor.js` tracks heap MB + CPU % and auto-disconnects on SAFE_HEAP_MB breach
-- **Emergency monitor**: `core/emergencyMonitor.js` — fires red Discord embed (with `@OWNER` mention) on health<15%, combat damage, or unexpected disconnect; per-reason cooldown prevents spam
-- **Persistence**: `lib/persistence/mongo.js` + `lib/persistence/models.js` — Mongoose schemas for `UserRoles`, `SavedLocations`, `Logs`. Reads `MONGODB_URI` from `.env` / Replit Secrets; **falls back to Local-Only Mode automatically** when the URI is missing or unreachable
-- **Survival automation**: `modules/survival.js` provides `ensurePickaxe()` (auto-craft on tool break inside `!mode mine`) and `mineflayer-auto-eat` config; `modules/inventory.js` exports `sortInventory()` (called by `!sort` and the mine-mode loop at ≥90% capacity)
-- **Rate limiting**: per-user + global sliding-window bucket in `discord/client.js`
-- **RBAC**: `config/roles.js` — OWNER / ADMIN / MANAGER / NONE tiers for Discord and in-game commands; `!sort` and `!waypoint` are MANAGER-tier
-- **CombatAI**: `modules/combatAI.js` — active engagement loop replacing the old flat 5s wait. Features: mob-specific tactics table (26 mobs), health-aware retreat (retreat at ≤6 HP, re-engage at ≥14 HP by default), sword cooldown timing (650ms), post-combat drop collection, max-chase-distance guard (30 blocks). All thresholds env-configurable. Guardian mode upgraded to use the full loop with overlap prevention. Danger watch range raised from 5 → 16 blocks.
-- **Death Logging**: On `bot.on('death')`, exact coordinates + mob cause are saved to MongoDB `faero_death_log` collection via `models.logDeath()`. On `bot.on('respawn')`, after a 4s chunk-load delay, bot auto-navigates to the death coordinates and calls `combatAI.collectDrops()` to collect items. `models.markDeathRecovered()` marks the record once drops are collected. REST API: `GET /bot-api/deaths` returns last 20 deaths with recovered flag. Dashboard: "Death Log" panel (MORTALITY LOG section) displays each death with coordinates, cause, timestamp, and recovered/pending badge, auto-refreshes every 30s.
-- **Waypoints**: persistent named locations on top of `SavedLocations` collection. In-game: `!waypoint set|list|tp|delete <name>`. Discord: `!bot waypoints [tp <name>]` (red embed on not-found). Dashboard panel + REST API at `/bot-api/waypoints` (GET/POST, DELETE/:name, POST/:name/go) with unified error envelope `{ ok:false, error:{ code, title, message, color } }`
-- **Auto Build**: `modules/autoBuild.js` — schematic-based block placement engine. 4 built-in schematics (platform_5x5, tower_3x3, house_small, staircase_8). Exports `parseSchematic`, `executeBuild`, `placeOneBlock`, `cancelBuild`, `getBuildStatus`, `listSchematics`. Singleton `_session` tracks one active leader build. REST: `GET /bot-api/build/schematics`, `GET /bot-api/build/status`, `POST /bot-api/build/cancel`, `POST /bot-api/build/run`. In-game: `!build schematic <name>`, `!build stop`, `!build status`, `!build list`.
-- **Fleet Manager**: `core/fleetManager.js` — multi-bot orchestration singleton. Manages an array of `FleetBot` instances (lightweight mineflayer wrappers). Each FleetBot loads pathfinder + pvp plugins. Follow loop polls leader position every 2s and moves minions to staggered spread offsets (8 positions). Group commands: follow, stop, come, join, leave, attack. Distributed build: `distributeBuild(schematic)` splits block list across all online bots (leader + minions) and runs chunks in parallel via `autoBuild.placeOneBlock`, bypassing the singleton session to allow concurrency. Emits `fleet:botKicked` (per FleetBot kicked event), `fleet:buildStart`, `fleet:buildComplete` for Discord proactive alerts. Socket events: `fleet:update` (real-time status every 4s), `fleet:log`. REST: `GET /bot-api/fleet/status`, `GET /bot-api/fleet/inventory`, `POST /bot-api/fleet/spawn`, `POST /bot-api/fleet/dismiss/:id`, `POST /bot-api/fleet/dismiss-all`, `POST /bot-api/fleet/command`, `POST /bot-api/fleet/build`. In-game: `!all follow|stop|come|join|leave`, `!all attack <target>`, `!all build <schematic>`. Dashboard: "Fleet Manager" panel (BOT ARMY) with spawn form, group command buttons, per-bot health bars and state badges, dismiss controls.
-- **Discord Fleet Bridge**: `modules/discordFleet.js` — Fleet command extension for `DiscordBridge`. Registered via `mountFleetExtension(bridge)` in `ClientReady`. Prefix `!fleet` (separate from `!bot`), requires ADMIN tier. Commands: `help`, `status` (live-updating embed), `follow`, `stop`, `come`, `join`, `leave`, `spawn <username>`, `dismiss <id>`, `build <schematic>`. Proactive alerts posted to `DISCORD_LOG_CHANNEL_ID` for: bot kicked (red embed), build started (cyan), build complete (green/amber). Same RBAC + rate-limit gate as `!bot` commands.
-- **Schematic Lab**: Custom schematic upload panel in the dashboard (BUILDER'S LAB). Session-scoped in-memory store (`_schematicStore` Map in `web/server.js`, max 20, 128 KB each). REST: `POST /bot-api/schematics/validate` (parse + block count preview, no save), `POST /bot-api/schematics/save`, `GET /bot-api/schematics`, `DELETE /bot-api/schematics/:id`, `POST /bot-api/schematics/:id/deploy` (fires `distributeBuild` with stored JSON object). UI: textarea for JSON paste, name input, Preview button (shows block-type table + dimensions), Save to Lab, list of saved schematics with Deploy to Fleet + Delete buttons.
+# System Architecture
 
-## Stack
+The project is structured as a pnpm monorepo with Node.js 24 and TypeScript 5.9. The core of FAERO is a CommonJS JavaScript bot built with Mineflayer.
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
-- **Minecraft bot**: CommonJS JavaScript, Mineflayer, Express, Socket.IO
+**UI/UX Decisions:**
+The web control panel features a cyberpunk glassmorphism UI with neon accents, scanlines, glowing status indicators, and animated logs. It includes movement controls, chat, and visible AI state readouts.
 
-## Key Commands
+**Technical Implementations:**
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
-- `pnpm install` — install Minecraft bot dependencies
-- `pnpm start` — run `startup.sh`, which starts the unified bot and web control entry point
+*   **Plugin System**: A dynamic plugin loader (`core/pluginLoader.js`) automatically discovers and integrates `.plugin.js` files, enabling modular functionality.
+*   **Self-monitoring**: `core/monitor.js` tracks system resources (heap, CPU) and initiates auto-disconnection if critical thresholds are breached. An `emergencyMonitor.js` sends critical alerts to Discord on severe events (low health, combat damage, unexpected disconnects), with cooldowns to prevent spam.
+*   **Persistence**: Uses MongoDB (via Mongoose) for storing user roles, saved locations, and logs. It seamlessly falls back to a local-only mode if MongoDB is unavailable.
+*   **Survival Automation**: `modules/survival.js` handles automatic tool crafting (`ensurePickaxe()`) and configuration of `mineflayer-auto-eat`. `modules/inventory.js` provides inventory sorting.
+*   **Security & Access Control**: Implements per-user and global sliding-window rate limiting in `discord/client.js`. Role-Based Access Control (RBAC) is defined in `config/roles.js` with OWNER, ADMIN, MANAGER, and NONE tiers for Discord and in-game commands.
+*   **Combat AI**: `modules/combatAI.js` features a dynamic engagement loop with mob-specific tactics, health-aware retreat and re-engagement, sword cooldown timing, post-combat drop collection, and a maximum chase distance. All thresholds are environment-configurable.
+*   **Death Logging & Recovery**: Records death coordinates and causes to MongoDB. Upon respawn, the bot navigates to the death location to collect drops and marks the death as recovered. A REST API (`/bot-api/deaths`) and dashboard panel display this information.
+*   **Waypoints**: Persistent named locations stored in MongoDB. Accessible via in-game commands (`!waypoint`) and Discord (`!bot waypoints`). A dedicated dashboard panel and REST API (`/bot-api/waypoints`) are available.
+*   **Auto Build**: `modules/autoBuild.js` provides a schematic-based block placement engine with built-in schematics (e.g., `platform_5x5`, `tower_3x3`, `house_small`, `staircase_8`). It supports custom schematics, pathfinding, inventory management, and chest-pull fallback.
+*   **Fleet Manager**: `core/fleetManager.js` orchestrates multiple bot instances (`FleetBot`). It manages group commands (follow, stop, come, join, leave, attack) and distributed builds, splitting block placement tasks across online bots. Provides real-time status via Socket.IO and a comprehensive REST API (`/bot-api/fleet/*`).
+*   **Discord Fleet Bridge**: `modules/discordFleet.js` extends the Discord bridge with fleet-specific commands (`!fleet`) for control and proactive alerts for events like bot kicks or build status.
+*   **Schematic Lab**: A dashboard panel for uploading, validating, saving, and deploying custom schematics. Schematics are stored in-memory per session and can be deployed to the fleet.
+*   **Bot Runtime**: The bot and a lightweight web control panel run within a single Node.js process using `app.js` and `startup.sh`. The control panel serves the browser UI, Socket.IO events, and bot REST endpoints.
+*   **AI Throttling**: Aggressive AI throttling measures are implemented, including cached mob scans, capped entity scans, a CPU usage gate, two-minute ore scan intervals, action cooldowns for expensive tasks, and bounded memory cleanup to optimize resource usage.
 
-## AI Minecraft Bot Structure
+**Feature Specifications:**
 
-- `core/` — bot lifecycle, dynamic connection state, reconnect handling, state manager, task queue, persistent memory
-- `ai/` — CommonJS think/decide/act brain and decision engine
-- `modules/` — survival, combat, pathfinding, inventory, economy, and commands
-- `web/` — Express server, Socket.IO bridge, and cyberpunk browser UI
+*   **Custom Schematic Format**: Supports JSON schematics with relative (`dx/dy/dz`) or absolute (`x/y/z`) block coordinates.
+*   **Hive Mind**: `core/hiveMind.js` acts as a singleton EventEmitter for collective intelligence, providing a shared memory bus, collective resource pool, task delegation engine, fleet health monitoring, and danger zone persistence.
+*   **Autonomous Survival v2**: Enhanced full survival loop for all bots, including food chain management and night shelter.
+*   **Tactical Combat Engine**: Planned for advanced combat strategies including formations, role assignment, and focus fire.
+*   **Neural Social Engine**: Planned for persistent conversation memory and improved human interaction.
+*   **Adaptive World Oracle**: Planned for server map learning, player behavior profiling, and predictive resource routing.
 
-## Minecraft Bot Runtime
+# External Dependencies
 
-The main application workflow runs `pnpm start`, which starts `startup.sh` and then `app.js`. `app.js` owns both the bot lifecycle and the lightweight web control panel in one Node process. The control panel serves the browser UI, WebSocket-only Socket.IO events, `/healthz`, and bot REST endpoints under `/bot-api/*`.
-
-The browser control panel sends Host, Port, Username, and Auth values through Socket.IO when Connect is clicked. `core/botManager.js` stores the last successful connection options so reconnects reuse the dynamic UI values instead of falling back to defaults.
-
-## Minecraft Bot Configuration
-
-Set these environment variables before running when needed:
-
-- `MC_HOST` — Minecraft server host, defaults to `localhost`
-- `MC_PORT` — Minecraft server port, defaults to `25565`
-- `MC_USERNAME` — bot username, defaults to `AI_Bot`
-- `MC_AUTH` — Mineflayer auth mode, defaults to `offline`
-- `MC_VERSION` — optional Minecraft version
-- `AUTHORIZED_USER` — username allowed to command the bot, defaults to `roaz`
-- `PVP_ENABLED` — set to `true` to allow safe PvP rules
-- `WEB_PORT` or `PORT` — web control panel port, defaults to `3000`
-- `AUTO_START_BOT` — set to `true` to connect the bot when the web server starts
-- `BOT_RECONNECT_DELAY_MS` — clean bot restart delay, defaults to `10000`
-- `BOT_MAX_RESTARTS` — maximum automatic bot restarts per window, defaults to `5`
-- `BOT_TICK_MS` — AI loop interval, defaults to `10000` for lower CPU use
-- `MOB_SCAN_INTERVAL_MS` — throttles mob scans, defaults to `15000`
-- `ORE_SCAN_INTERVAL_MS` — throttles expensive ore scans, defaults to `120000`
-- `RESOURCE_ACTION_INTERVAL_MS` — minimum delay between resource/pathfinding tasks, defaults to `120000`
-- `SURVIVAL_ACTION_INTERVAL_MS` — minimum delay between survival tasks, defaults to `45000`
-- `DANGER_ACTION_INTERVAL_MS` — minimum delay between danger/combat tasks, defaults to `20000`
-- `AI_CPU_LIMIT_PERCENT` — skips new AI work when process CPU reaches this threshold, defaults to `30`
-- `MEMORY_CLEANUP_INTERVAL_MS` — minimum interval between lightweight memory cleanup passes, defaults to `60000`
-- `MEMORY_MAX_ATTACKERS`, `MEMORY_MAX_PAYMENTS`, `MEMORY_MAX_FACTS` — hard caps for stored bot memory maps, default to `50`
-
-## Auto Build Module (`modules/autoBuild.js`)
-
-Schematic-based block placement system with pathfinding, inventory management, and chest-pull fallback.
-
-**Built-in schematics:** `platform_5x5` (5×5 flat platform), `tower_3x3` (3×3 tower, 5 tall), `house_small` (7×7 walled outline with doorway), `staircase_8` (8-step solid staircase)
-
-**Custom schematic format:**
-```json
-{ "name": "my_build", "relative": true,
-  "blocks": [{ "dx": 0, "dy": 0, "dz": 0, "type": "oak_planks" }] }
-```
-Relative (`dx/dy/dz`) offsets from the bot's current position; or absolute (`x/y/z`) world coords with `"relative": false`.
-
-**In-game commands (ADMIN tier):**
-- `!build schematic <name>` — run a built-in schematic
-- `!build status` — show placed/remaining/failed counts
-- `!build stop` — cancel the running build
-- `!build list` — list all built-in schematic names
-
-**Dashboard REST API:**
-- `GET  /bot-api/build/schematics` — list built-in names
-- `GET  /bot-api/build/status` — live progress
-- `POST /bot-api/build/cancel` — cancel active build
-- `POST /bot-api/build/run` — run a build; body: `{ "name": "platform_5x5" }` or `{ "schematic": {...} }`
-
-**Behaviour:**
-- Blocks sorted bottom-up by Y so foundations are always placed first
-- Navigates within 4 blocks of each target using `GoalNear`; tries all 6 faces to find a solid reference
-- Checks inventory before starting; tries to pull missing items from nearest chest/barrel within 16 blocks
-- Reports missing materials in chat after completion
-- Uses `antiDetection.jitter` (180–520 ms) between successful placements
-- Module-level `_session` singleton — only one build runs at a time; new build cancels previous
-
-## Max Pro Monster Roadmap
-
-Five god-tier modules being built in sequence to elevate FAERO to elite-tier collective intelligence:
-
-| # | Module | Status |
-|---|--------|--------|
-| 1 | **Hive Mind** — shared state bus, collective memory, resource pool, danger zones, fleet health monitor | ✅ Complete |
-| 2 | **Autonomous Survival v2** — full survival loop for ALL bots (not just leader), food chain, night shelter | ✅ Complete |
-| 3 | **Tactical Combat Engine** — formations (Wedge/Pincer/Shield Wall), role assignment, focus fire, staggered swings | Planned |
-| 4 | **Neural Social Engine** — persistent conversation memory, human typing rhythms, admin rapport building | Planned |
-| 5 | **Adaptive World Oracle** — server map learning, player behavior profiling, predictive resource routing | Planned |
-
-## Hive Mind (Module 1) — `core/hiveMind.js`
-
-Singleton EventEmitter connecting all fleet bots into a single collective intelligence.
-
-**What it provides:**
-- **Shared Memory Bus** — enemies, danger zones, resources broadcast to all bots instantly
-- **Collective Resource Pool** — real-time aggregated inventory across entire fleet, top-40 items
-- **Task Delegation Engine** — `getBestBotFor()` scores bots by HP, idle status, proximity
-- **Fleet Health Monitor** — checks avg HP every 15 s; broadcasts `hive:retreatSignal` at <35%
-- **Danger Zone Persistence** — serializes zones to `data/hive_memory.json` every 90 s; restores on startup
-- **Intel Feed** — rolling 120-entry log of collective activity with types: system/enemy/danger/resource/task
-
-**Integration points:**
-- `core/botManager.js` — registers leader on spawn, reports enemies from danger watch, flags death sites, syncs inventory pool on every slot change
-- `core/fleetManager.js` — registers/unregisters each minion, syncs minion inventory on slot change, flags minion death sites
-- `modules/scanner.js` — pipes new ore/chest discoveries into `hiveMind.reportResource()` on first find
-- `web/socket.js` — bridges `hive:intel`, `hive:update`, `hive:pool`, `hive:dangerZone`, `hive:enemySpotted`, `hive:taskAssigned` to dashboard in real-time
-- `web/server.js` — REST: `GET /bot-api/hive/status`, `/intel`, `/pool`, `/enemies`, `/dangers`; `POST /bot-api/hive/danger`, `/task`, `/broadcast`
-
-**Dashboard panel** — Live Hive Mind panel with fleet roster (role/HP/position/task badges), collective pool chips, known threats list, live intel feed, broadcast alert input, and manual danger zone flag form.
-
-## Recent Updates
-
-- Fixed `ai/decisionEngine.js` so `think`, `decide`, and `act` are separate functions exported as `module.exports = { act, think, decide }`.
-- The previously unused `inventory` import is now used to build inventory and food-stock AI snapshots.
-- Fixed dynamic connection and reconnect behavior for web-entered server details.
-- Kept Socket.IO listeners inside the per-connection socket scope and sanitized AI thought payloads before broadcasting.
-- Updated the web control panel with a cyberpunk glassmorphism UI, neon accents, scanlines, glowing status indicators, animated logs, movement controls, chat, and visible AI state readouts.
-- Added a unified `app.js` entry point, `startup.sh`, and `core/processManager.js` to supervise bot crashes without spawning extra Node processes.
-- Reduced web overhead by using WebSocket-only Socket.IO transport, smaller message limits, disabled compression, and a capped Express JSON body size.
-- Reduced AI loop resource use by defaulting to a slower tick and throttling expensive ore scans.
-- Added a lightweight resource dashboard showing CPU, RAM, process status, and restart count through a low-frequency metrics endpoint.
-- Added aggressive AI throttling: cached mob scans, capped entity scans, a CPU gate at 30%, two-minute ore scan intervals, action cooldowns before expensive pathfinding/resource tasks are queued, smaller mining batches, and safer pathfinder movement defaults.
-- Added bounded memory cleanup in `core/memory.js` so stale attack/payment/fact entries expire, maps are capped, strings are truncated, and status snapshots no longer deep-clone unbounded memory objects.
+*   **Monorepo Tool**: pnpm workspaces
+*   **Minecraft Bot Library**: Mineflayer
+*   **Web Server Framework**: Express 5
+*   **Real-time Communication**: Socket.IO
+*   **Database**: PostgreSQL
+*   **ORM**: Drizzle ORM
+*   **Validation**: Zod (`zod/v4`), `drizzle-zod`
+*   **API Codegen**: Orval (from OpenAPI spec)
+*   **Build Tool**: esbuild (for CJS bundle)
+*   **Discord Integration**: Discord.js (implied by Discord bridge functionality)
+*   **MongoDB**: (Used for persistence, via Mongoose)
