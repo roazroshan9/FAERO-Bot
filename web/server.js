@@ -718,6 +718,27 @@ function mountRoutes(app, io, botManager) {
     }
   });
 
+  app.get('/bot-api/survival/status', (req, res) => {
+    try {
+      const fleetMgr = require('../core/fleetManager');
+      const fleet    = fleetMgr.getStatus();
+      const states   = {};
+      // Leader survival state
+      const leaderState = botManager._survivalLoop
+        ? botManager._survivalLoop.getState() : 'idle';
+      const leaderId = 'leader_' + (botManager.bot && botManager.bot.username
+        ? botManager.bot.username : 'faero');
+      states[leaderId] = leaderState;
+      // Minion survival states
+      (fleet.bots || []).forEach(b => {
+        states[b.id] = b.survivalState || 'idle';
+      });
+      res.json({ ok: true, states, totalBots: Object.keys(states).length });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
   app.post('/bot-api/hive/broadcast', (req, res) => {
     try {
       const hiveMind = require('../core/hiveMind');

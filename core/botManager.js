@@ -22,6 +22,7 @@ const { KeepAlive }     = require('./keepAlive');
 const selfLearning      = require('../ai/selfLearning');
 const { FarmScheduler } = require('../modules/farming');
 const antiDetection     = require('../modules/antiDetection');
+const survivalV2        = require('../modules/survivalV2');
 
 class BotManager extends EventEmitter {
   constructor() {
@@ -61,6 +62,7 @@ class BotManager extends EventEmitter {
       onLog:    (msg) => this.log(msg),
       onResult: (r)   => this.emit('farmCycle', r)
     });
+    this._survivalLoop = survivalV2.create();
     // ── Plugin system ─────────────────────────────────────────────────────────
     this.pluginLoader = new PluginLoader();
     const pluginsDir = path.join(__dirname, '..', 'plugins');
@@ -187,6 +189,13 @@ class BotManager extends EventEmitter {
       // Push initial inventory to shared pool
       this._syncHivePool();
 
+      // ── Autonomous Survival v2: attach to leader ─────────────────────────────
+      this._survivalLoop.attach(bot, {
+        botId: leaderId,
+        role:  'leader',
+        onLog: (msg) => this.log(msg)
+      });
+
       this.emit('bot', this.getStatus());
       this.emit('inventory', this.getInventory());
     });
@@ -310,6 +319,7 @@ class BotManager extends EventEmitter {
       try { this.keepAlive.detach(); } catch (_) {}
       try { this._farmScheduler.stop(); } catch (_) {}
       try { antiDetection.detach(); } catch (_) {}
+      try { this._survivalLoop.detach(); } catch (_) {}
       this.bot = null;
       this.emit('bot', this.getStatus());
       if (this.shouldReconnect) {

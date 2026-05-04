@@ -212,6 +212,26 @@ function attachSocket(io, botManager) {
   hiveMind.on('hive:dangerZone',   (data) => io.emit('hive:dangerZone',   data));
   hiveMind.on('hive:enemySpotted', (data) => io.emit('hive:enemySpotted', data));
   hiveMind.on('hive:taskAssigned', (data) => io.emit('hive:taskAssigned', data));
+
+  // ── Survival v2 broadcast bridge ─────────────────────────────────────────────
+  // Relay food_request and retreat broadcasts to the dashboard as intel events
+  hiveMind.on('hive:broadcast', ({ event, payload }) => {
+    if (event === 'food_request') {
+      io.emit('hive:intel', {
+        type: 'resource',
+        message: '[' + (payload && payload.requesterId || '?') + '] requesting food from ' +
+                 (payload && payload.donorId || '?'),
+        at: new Date().toISOString()
+      });
+    } else if (event === 'retreat') {
+      io.emit('hive:intel', {
+        type: 'danger',
+        message: '⚠ Fleet retreat signal — avg HP ' + (payload && payload.avgHp || '?') +
+                 '/20 (' + (payload && payload.pct || '?') + '%)',
+        at: new Date().toISOString()
+      });
+    }
+  });
 }
 
 function normalizeConnectionOptions(options) {

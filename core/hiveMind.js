@@ -320,7 +320,8 @@ class HiveMind extends EventEmitter {
           y: Math.round(b.entity.position.y),
           z: Math.round(b.entity.position.z)
         } : null,
-        currentTask: (task && !task.completedAt) ? task.task : null
+        currentTask:   (task && !task.completedAt) ? task.task : null,
+        survivalState: e.survivalState || null
       });
     }
     return {

@@ -125,7 +125,7 @@ Five god-tier modules being built in sequence to elevate FAERO to elite-tier col
 | # | Module | Status |
 |---|--------|--------|
 | 1 | **Hive Mind** — shared state bus, collective memory, resource pool, danger zones, fleet health monitor | ✅ Complete |
-| 2 | **Autonomous Survival v2** — full survival loop for ALL bots (not just leader), food chain, night shelter | Planned |
+| 2 | **Autonomous Survival v2** — full survival loop for ALL bots (not just leader), food chain, night shelter | ✅ Complete |
 | 3 | **Tactical Combat Engine** — formations (Wedge/Pincer/Shield Wall), role assignment, focus fire, staggered swings | Planned |
 | 4 | **Neural Social Engine** — persistent conversation memory, human typing rhythms, admin rapport building | Planned |
 | 5 | **Adaptive World Oracle** — server map learning, player behavior profiling, predictive resource routing | Planned |

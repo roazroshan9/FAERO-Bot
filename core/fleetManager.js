@@ -48,7 +48,10 @@ const mineflayer   = require('mineflayer');
 
 const { pathfinder: pathfinderPlugin, goals, Movements } =
   require('mineflayer-pathfinder');
-const pvpPlugin = require('mineflayer-pvp').plugin;
+const pvpPlugin          = require('mineflayer-pvp').plugin;
+const armorManagerPlugin = require('mineflayer-armor-manager');
+const autoEatPlugin      = require('mineflayer-auto-eat').loader;
+const survivalV2         = require('../modules/survivalV2');
 
 // Spread offsets [dx, dy, dz] relative to the leader's position for each minion index
 const FOLLOW_OFFSETS = [
@@ -80,6 +83,7 @@ class FleetBot extends EventEmitter {
     this._following      = false;       // whether follow mode is active
     this.shouldReconnect = false;
     this._reconnectTimer = null;
+    this._survivalLoop   = survivalV2.create();
   }
 
   // ── Connection lifecycle ────────────────────────────────────────────────────
@@ -102,6 +106,8 @@ class FleetBot extends EventEmitter {
 
     bot.loadPlugin(pathfinderPlugin);
     bot.loadPlugin(pvpPlugin);
+    bot.loadPlugin(armorManagerPlugin);
+    try { bot.loadPlugin(autoEatPlugin); } catch (_) {}
 
     bot.once('spawn', () => {
       this._setState('online');
@@ -134,6 +140,13 @@ class FleetBot extends EventEmitter {
           });
         }
       });
+
+      // ── Autonomous Survival v2 ────────────────────────────────────────────
+      this._survivalLoop.attach(bot, {
+        botId: this.id,
+        role:  'soldier',
+        onLog: (msg) => this.log(msg)
+      });
     });
 
     bot.on('chat', (username, message) => {
@@ -156,6 +169,7 @@ class FleetBot extends EventEmitter {
     });
 
     bot.on('end', () => {
+      this._survivalLoop.detach();
       this.bot = null;
       this._following = false;
       this._setState('offline');
@@ -169,6 +183,7 @@ class FleetBot extends EventEmitter {
   }
 
   disconnect() {
+    this._survivalLoop.detach();
     this.shouldReconnect = false;
     this._following = false;
     if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
@@ -228,10 +243,11 @@ class FleetBot extends EventEmitter {
         y: Math.round(b.entity.position.y * 10) / 10,
         z: Math.round(b.entity.position.z * 10) / 10
       } : null,
-      following: this._following,
-      invCount:  b ? b.inventory.items().length : 0,
-      host:      this.options.host,
-      port:      this.options.port
+      following:     this._following,
+      survivalState: this._survivalLoop ? this._survivalLoop.getState() : 'idle',
+      invCount:      b ? b.inventory.items().length : 0,
+      host:          this.options.host,
+      port:          this.options.port
     };
   }
 

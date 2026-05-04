@@ -1500,6 +1500,19 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
   }
 
   // ── Render roster ───────────────────────────────────────────────────────────
+  var SV_COLORS = {
+    idle:       { bg: 'rgba(117,168,168,0.12)', fg: 'var(--muted)',  label: 'IDLE' },
+    eating:     { bg: 'rgba(255,200,50,0.18)',  fg: '#ffc832',       label: 'EATING' },
+    hunting:    { bg: 'rgba(255,200,50,0.18)',  fg: '#ffc832',       label: 'HUNTING' },
+    healing:    { bg: 'rgba(57,255,20,0.15)',   fg: 'var(--green)',  label: 'HEALING' },
+    fleeing:    { bg: 'rgba(255,49,95,0.18)',   fg: 'var(--red)',    label: 'FLEEING' },
+    critical:   { bg: 'rgba(255,49,95,0.30)',   fg: '#ff315f',       label: '⚠ CRIT' },
+    sheltering: { bg: 'rgba(0,200,255,0.18)',   fg: 'var(--cyan)',   label: 'SHELTER' },
+    armoring:   { bg: 'rgba(0,255,255,0.15)',   fg: 'var(--cyan)',   label: 'ARMOR' },
+    toolcraft:  { bg: 'rgba(0,255,255,0.15)',   fg: 'var(--cyan)',   label: 'CRAFTING' },
+    'craft_tool': { bg: 'rgba(0,255,255,0.15)', fg: 'var(--cyan)',   label: 'CRAFTING' }
+  };
+
   function renderRoster(bots) {
     if (!bots || !bots.length) {
       rosterEl.innerHTML = '<div class="hive-empty">No bots linked to Hive yet.</div>';
@@ -1508,16 +1521,25 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
     rosterEl.innerHTML = bots.map(function (b) {
       var hp    = b.health != null ? Math.round(b.health) : null;
       var pos   = b.position ? 'X' + b.position.x + ' Y' + b.position.y + ' Z' + b.position.z : '—';
-      var task  = b.currentTask
+      var task  = b.currentTask && !String(b.currentTask).startsWith('survival:')
         ? '<span class="hive-bot-task">' + esc(b.currentTask) + '</span>'
         : '';
       var hpStr = hp != null ? '<span class="hive-bot-hp">♥ ' + hp + '</span>' : '';
+      var hunger = b.hunger != null ? '<span class="hive-bot-hunger" title="hunger">🍖 ' + b.hunger + '</span>' : '';
+
+      var sv = b.survivalState && SV_COLORS[b.survivalState]
+        ? SV_COLORS[b.survivalState]
+        : (b.survivalState ? { bg:'rgba(117,168,168,0.12)', fg:'var(--muted)', label: b.survivalState.toUpperCase() } : null);
+      var svBadge = (sv && b.survivalState !== 'idle')
+        ? '<span class="hive-sv-badge" style="background:' + sv.bg + ';color:' + sv.fg + ';border-color:' + sv.fg + '">' + esc(sv.label) + '</span>'
+        : '';
+
       return '<div class="hive-bot-row' + (b.online ? '' : ' hive-bot-offline') + '">' +
         '<span class="hive-bot-role ' + esc(b.role) + '">' + esc(b.role.toUpperCase()) + '</span>' +
         '<span class="hive-bot-name">' + esc(b.username) + '</span>' +
-        hpStr +
+        hpStr + hunger +
         '<span style="font-size:0.68rem;color:var(--muted);">' + esc(pos) + '</span>' +
-        task +
+        svBadge + task +
         '<span style="font-size:0.65rem;color:' + (b.online ? '#39FF14' : '#ff315f') + ';margin-left:auto">' +
           (b.online ? '● ONLINE' : '○ OFFLINE') + '</span>' +
       '</div>';
@@ -1585,6 +1607,29 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
     '</div>';
   }
 
+  // ── Render survival overview grid ───────────────────────────────────────────
+  var survivalGridEl = document.getElementById('hiveSurvivalGrid');
+
+  function renderSurvivalGrid(bots) {
+    if (!survivalGridEl) return;
+    if (!bots || !bots.length) {
+      survivalGridEl.innerHTML = '<div class="hive-empty">No bots active.</div>';
+      return;
+    }
+    survivalGridEl.innerHTML = bots.map(function (b) {
+      var sv  = b.survivalState || 'idle';
+      var cfg = SV_COLORS[sv] || { bg: 'rgba(117,168,168,0.12)', fg: 'var(--muted)', label: sv.toUpperCase() };
+      var hp  = b.health != null ? Math.round(b.health) : '?';
+      var hun = b.hunger != null ? b.hunger : '?';
+      return '<div class="sv-overview-chip" style="border-color:' + cfg.fg + '40;">' +
+        '<span class="sv-name">' + esc(b.username) + '</span>' +
+        '<span class="sv-state" style="color:' + cfg.fg + ';">' + cfg.label + '</span>' +
+        '<span style="font-size:0.62rem;color:#ff6b8a;">♥' + hp + '</span>' +
+        '<span style="font-size:0.62rem;color:#ffc832;">🍖' + hun + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
   // ── Full render from status snapshot ────────────────────────────────────────
   function applyStatus(hive) {
     if (!hive) return;
@@ -1595,6 +1640,7 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
     renderRoster(hive.bots || []);
     renderPool(hive.pool || {});
     renderEnemies(hive.knownEnemies || []);
+    renderSurvivalGrid(hive.bots || []);
     if (hive.intelFeed && hive.intelFeed.length) {
       renderIntel(hive.intelFeed, false);
     }
