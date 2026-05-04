@@ -4274,3 +4274,375 @@ button:active:not(:disabled) {
   box-shadow: 0 0 16px rgba(0,255,255,0.06), inset 0 0 14px rgba(0,255,255,0.03);
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   WORLD ORACLE PANEL — Module 5
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.oracle-panel { padding: 28px 28px 32px; }
+
+/* ── Header Row ─────────────────────────────────────────────────────────── */
+.oracle-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.oracle-header-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.oracle-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 1px solid currentColor;
+  transition: box-shadow 0.3s;
+}
+
+.oracle-badge.chunks  { color: #00ffff; border-color: rgba(0,255,255,0.4); background: rgba(0,255,255,0.07); }
+.oracle-badge.finds   { color: #a78bfa; border-color: rgba(167,139,250,0.4); background: rgba(167,139,250,0.07); }
+.oracle-badge.players { color: #00ff9f; border-color: rgba(0,255,159,0.4); background: rgba(0,255,159,0.07); }
+
+/* ── Exploration Stats Row ──────────────────────────────────────────────── */
+.oracle-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 20px 0;
+}
+
+@media (max-width: 700px) {
+  .oracle-stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+.oracle-stat-card {
+  background: rgba(0,255,255,0.04);
+  border: 1px solid rgba(0,255,255,0.12);
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: center;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.oracle-stat-card:hover {
+  border-color: rgba(0,255,255,0.3);
+  box-shadow: 0 0 18px rgba(0,255,255,0.07);
+}
+
+.oracle-stat-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: rgba(0,255,255,0.5);
+  margin-bottom: 8px;
+}
+
+.oracle-stat-value {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 700;
+  color: #00ffff;
+  text-shadow: 0 0 16px rgba(0,255,255,0.5);
+  transition: color 0.4s;
+}
+
+.oracle-stat-value.updated {
+  color: #a78bfa;
+  text-shadow: 0 0 20px rgba(167,139,250,0.7);
+}
+
+/* ── Section Headers ────────────────────────────────────────────────────── */
+.oracle-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 24px 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0,255,255,0.1);
+}
+
+.oracle-section-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: rgba(0,255,255,0.6);
+}
+
+/* ── Family Tabs ────────────────────────────────────────────────────────── */
+.oracle-family-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.oracle-tab {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 4px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(0,255,255,0.25);
+  background: transparent;
+  color: rgba(0,255,255,0.5);
+  cursor: pointer;
+  transition: all 0.25s;
+}
+
+.oracle-tab:hover {
+  border-color: rgba(0,255,255,0.5);
+  color: #00ffff;
+  background: rgba(0,255,255,0.06);
+}
+
+.oracle-tab.active {
+  border-color: rgba(0,255,255,0.8);
+  color: #00ffff;
+  background: rgba(0,255,255,0.13);
+  box-shadow: 0 0 12px rgba(0,255,255,0.2);
+}
+
+/* ── Hotspot Table ──────────────────────────────────────────────────────── */
+.oracle-hotspot-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 60px;
+}
+
+.oracle-table-empty {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: rgba(255,255,255,0.3);
+  padding: 18px 0;
+  text-align: center;
+  font-style: italic;
+}
+
+.oracle-hotspot-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 90px 90px 90px 90px;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0,255,255,0.03);
+  border: 1px solid rgba(0,255,255,0.08);
+  border-radius: 8px;
+  padding: 10px 14px;
+  transition: border-color 0.25s, background 0.25s;
+  animation: oracleFadeIn 0.35s ease both;
+}
+
+.oracle-hotspot-row:hover {
+  border-color: rgba(0,255,255,0.22);
+  background: rgba(0,255,255,0.05);
+}
+
+@keyframes oracleFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.oracle-hotspot-rank {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(0,255,255,0.35);
+  text-align: center;
+}
+
+.oracle-hotspot-family {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.oracle-hotspot-coord {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(0,255,255,0.75);
+  text-align: center;
+}
+
+.oracle-hotspot-finds {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(167,139,250,0.85);
+  text-align: center;
+}
+
+.oracle-hotspot-conf {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.oracle-conf-bar {
+  flex: 1;
+  height: 4px;
+  background: rgba(0,255,255,0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.oracle-conf-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(0,255,255,0.6), #00ffff);
+  transition: width 0.6s ease;
+}
+
+.oracle-conf-pct {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgba(0,255,255,0.7);
+  white-space: nowrap;
+}
+
+/* ── Recent Finds Feed ──────────────────────────────────────────────────── */
+.oracle-finds-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,255,255,0.2) transparent;
+}
+
+.oracle-find-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 80px 80px 80px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(0,255,255,0.02);
+  border: 1px solid rgba(0,255,255,0.05);
+  font-family: var(--mono);
+  font-size: 11px;
+  animation: oracleFadeIn 0.25s ease both;
+}
+
+.oracle-find-time  { color: rgba(255,255,255,0.3); }
+.oracle-find-type  { color: #e2e8f0; font-weight: 600; }
+.oracle-find-x     { color: rgba(248,113,113,0.85); text-align: center; }
+.oracle-find-y     { color: rgba(251,191,36,0.85);  text-align: center; }
+.oracle-find-z     { color: rgba(52,211,153,0.85);  text-align: center; }
+
+/* ── Player Behaviour Grid ──────────────────────────────────────────────── */
+.oracle-player-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.oracle-player-card {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(0,255,255,0.12);
+  border-radius: 12px;
+  padding: 16px 18px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  animation: oracleFadeIn 0.35s ease both;
+}
+
+.oracle-player-card:hover {
+  border-color: rgba(0,255,255,0.3);
+  box-shadow: 0 0 20px rgba(0,255,255,0.08);
+}
+
+.oracle-player-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.oracle-player-name {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.oracle-style-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  padding: 3px 9px;
+  border-radius: 12px;
+}
+
+.oracle-style-badge.MINER    { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.35); }
+.oracle-style-badge.FIGHTER  { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.35); }
+.oracle-style-badge.EXPLORER { background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid rgba(52,211,153,0.35); }
+.oracle-style-badge.TRADER   { background: rgba(167,139,250,0.15); color: #a78bfa; border: 1px solid rgba(167,139,250,0.35); }
+.oracle-style-badge.UNKNOWN  { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.35); border: 1px solid rgba(255,255,255,0.15); }
+
+.oracle-player-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.oracle-player-stat {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgba(255,255,255,0.4);
+}
+
+.oracle-player-stat span:last-child {
+  color: rgba(0,255,255,0.75);
+}
+
+.oracle-player-homezone {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0,255,255,0.07);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgba(255,255,255,0.3);
+}
+
+.oracle-player-homezone strong {
+  color: rgba(0,255,255,0.65);
+}
+
+/* ── Refresh Button ─────────────────────────────────────────────────────── */
+.oracle-refresh-btn {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 5px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(0,255,255,0.3);
+  background: transparent;
+  color: rgba(0,255,255,0.7);
+  cursor: pointer;
+  transition: all 0.25s;
+}
+
+.oracle-refresh-btn:hover:not(:disabled) {
+  background: rgba(0,255,255,0.1);
+  color: #00ffff;
+  box-shadow: 0 0 12px rgba(0,255,255,0.2);
+}
+
+.oracle-refresh-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

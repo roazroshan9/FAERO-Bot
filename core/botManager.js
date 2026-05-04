@@ -165,6 +165,15 @@ class BotManager extends EventEmitter {
       this.keepAlive.attach(bot);
       this.log('[keepalive] watchdog attached');
 
+      // ── World Oracle: attach terrain/resource/player learning ───────────────
+      try {
+        const worldOracle = require('../modules/worldOracle');
+        worldOracle.attach(bot, {
+          onLog: (msg) => this.log(msg),
+          onOracleEvent: (evt) => this.emit('oracle:find', evt)
+        });
+      } catch (_) {}
+
       // ── Anti-detection (idle behaviour + anti-AFK) ───────────────────────────
       const stateManager = this.stateManager;
       antiDetection.attach(bot, {
@@ -208,15 +217,18 @@ class BotManager extends EventEmitter {
         this.log('Command error: ' + err.message);
       }
       // ── Neural Social Engine: rapport tracking for all chat ──────────────
-      // Note: chatResponder owns conversation history for AI messages.
-      // botManager only updates rapport score (no history push) for all messages.
       if (username !== bot.username && !message.startsWith('!')) {
         const social = require('../modules/socialEngine');
         const type   = social.inferInteractionType(message);
-        // recordInteraction without opts.message → updates rapport only, no history push
         social.recordInteraction(username, type).then(result => {
           this.emit('social_update', { username, type, rapportScore: result.rapportScore, classification: result.classification });
         }).catch(() => {});
+
+        // ── World Oracle: record chat-derived behaviour signals ───────────
+        try {
+          const worldOracle = require('../modules/worldOracle');
+          worldOracle.recordPlayerChatSignal(username, message);
+        } catch (_) {}
       }
     });
 

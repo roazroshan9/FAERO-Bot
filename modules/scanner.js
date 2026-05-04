@@ -139,6 +139,16 @@ class AreaScanner {
                 z: found.position.z
               });
             } catch (_) {}
+            // ── World Oracle: record all scanner discoveries ─────────────────
+            try {
+              const worldOracle = require('./worldOracle');
+              worldOracle.onScannerFind(
+                blockName,
+                found.position.x,
+                found.position.y,
+                found.position.z
+              );
+            } catch (_) {}
           }
         } else {
           // Remove stale entry — block is no longer in range

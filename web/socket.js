@@ -1,4 +1,5 @@
-const commands = require('../modules/commands');
+const commands    = require('../modules/commands');
+const worldOracle = require('../modules/worldOracle');
 
 function attachSocket(io, botManager) {
   attachMinecraftChatBridge(io, botManager);
@@ -310,6 +311,14 @@ function attachSocket(io, botManager) {
 
   // ── Neural Social Engine event bridge ─────────────────────────────────────
   botManager.on('social_update', (data) => io.emit('social:update', data));
+  botManager.on('oracle:find',   (data) => {
+    io.emit('oracle:find', data);
+    // Also push a live status snapshot every resource find
+    try {
+      const oracle = require('../modules/worldOracle');
+      io.emit('oracle:status', oracle.getStatus());
+    } catch (_) {}
+  });
 
   // ── Hive Mind event bridge ─────────────────────────────────────────────────
   const hiveMind = require('../core/hiveMind');

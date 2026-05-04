@@ -59,6 +59,7 @@
           <a href="#panel-fleet"       class="sidebar-link">&#x1F916; Fleet</a>
           <a href="#panel-hive"        class="sidebar-link">&#x1F9E0; Hive Mind</a>
           <a href="#panel-social"      class="sidebar-link">&#x1F465; Social Intel</a>
+          <a href="#panel-oracle"      class="sidebar-link">&#x1F30D; World Oracle</a>
           <a href="#panel-inventory"   class="sidebar-link">&#x1F392; Inventory</a>
           <a href="#panel-waypoints"   class="sidebar-link">&#x1F4CD; Waypoints</a>
           <a href="#panel-schematic"   class="sidebar-link">&#x1F528; Lab</a>
@@ -664,6 +665,77 @@ reason: waiting</pre>
           </div>
           <div id="socialFeed" class="social-feed">
             <div class="social-feed-empty">No interactions recorded yet.</div>
+          </div>
+        </div>
+
+        <!-- ── World Oracle Panel ─────────────────────────────────────── -->
+        <div class="card wide glass-panel oracle-panel" id="panel-oracle">
+          <div class="panel-title-row">
+            <p class="eyebrow">ADAPTIVE WORLD ORACLE · MODULE 5</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <div class="oracle-header-row">
+            <h2>World Oracle</h2>
+            <div class="oracle-header-badges">
+              <span class="oracle-badge chunks"  id="oracleChunkBadge"><span id="oracleChunkNum">0</span> CHUNKS</span>
+              <span class="oracle-badge finds"   id="oracleFindsBadge"><span id="oracleFindsNum">0</span> FINDS</span>
+              <span class="oracle-badge players" id="oraclePlayerBadge"><span id="oraclePlayerNum">0</span> PLAYERS</span>
+            </div>
+          </div>
+          <p class="chat-help">Bots learn the server map in real-time — tracking explored terrain, logging every ore discovery, and predicting the richest spawn clusters. Player movement patterns are sampled every 30 s to infer play styles and home zones.</p>
+
+          <!-- Exploration Stats Row -->
+          <div class="oracle-stats-row" id="oracleStatsRow">
+            <div class="oracle-stat-card">
+              <div class="oracle-stat-label">CHUNKS EXPLORED</div>
+              <div class="oracle-stat-value" id="oStatChunks">0</div>
+            </div>
+            <div class="oracle-stat-card">
+              <div class="oracle-stat-label">AREA (BLOCKS²)</div>
+              <div class="oracle-stat-value" id="oStatArea">0</div>
+            </div>
+            <div class="oracle-stat-card">
+              <div class="oracle-stat-label">RESOURCE FINDS</div>
+              <div class="oracle-stat-value" id="oStatFinds">0</div>
+            </div>
+            <div class="oracle-stat-card">
+              <div class="oracle-stat-label">PLAYERS PROFILED</div>
+              <div class="oracle-stat-value" id="oStatPlayers">0</div>
+            </div>
+          </div>
+
+          <!-- Resource Hotspot Predictions -->
+          <div class="oracle-section-header">
+            <span class="oracle-section-title">RESOURCE HOTSPOT PREDICTIONS</span>
+            <div class="oracle-family-tabs" id="oracleFamilyTabs">
+              <button class="oracle-tab active" data-family="diamond">Diamond</button>
+              <button class="oracle-tab" data-family="iron">Iron</button>
+              <button class="oracle-tab" data-family="gold">Gold</button>
+              <button class="oracle-tab" data-family="ancient_debris">Debris</button>
+              <button class="oracle-tab" data-family="coal">Coal</button>
+              <button class="oracle-tab" data-family="chest">Chests</button>
+              <button class="oracle-tab" data-family="spawner">Spawners</button>
+            </div>
+          </div>
+          <div class="oracle-hotspot-table" id="oracleHotspotTable">
+            <div class="oracle-table-empty">No resource finds recorded yet. Once the bot is connected and starts scanning, hotspot predictions will appear here.</div>
+          </div>
+
+          <!-- Recent Finds Feed -->
+          <div class="oracle-section-header">
+            <span class="oracle-section-title">RECENT DISCOVERIES</span>
+          </div>
+          <div class="oracle-finds-feed" id="oracleFindsFeed">
+            <div class="oracle-table-empty">No discoveries yet.</div>
+          </div>
+
+          <!-- Player Behaviour Profiles -->
+          <div class="oracle-section-header">
+            <span class="oracle-section-title">PLAYER BEHAVIOUR PROFILES</span>
+            <button class="oracle-refresh-btn" id="oracleRefreshBtn">Refresh</button>
+          </div>
+          <div class="oracle-player-grid" id="oraclePlayerGrid">
+            <div class="oracle-table-empty">No players profiled yet. The oracle samples player positions every 30 s once bots are connected.</div>
           </div>
         </div>
 

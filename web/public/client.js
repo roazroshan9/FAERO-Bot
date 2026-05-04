@@ -2633,6 +2633,7 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
   var sidebarToggle = document.getElementById('sidebarToggle');
   var sidebar       = document.getElementById('sidebar');
 
+
   if (sidebarToggle && sidebar) {
     sidebarToggle.addEventListener('click', function () {
       sidebar.classList.toggle('open');
@@ -2646,5 +2647,262 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
       }
     });
   }
+
+})();
+
+// ════════════════════════════════════════════════════════════════════════════
+// WORLD ORACLE PANEL — Module 5: Adaptive World Oracle
+// ════════════════════════════════════════════════════════════════════════════
+(function WorldOraclePanel() {
+  'use strict';
+
+  var chunkNumEl   = document.getElementById('oracleChunkNum');
+  var findsNumEl   = document.getElementById('oracleFindsNum');
+  var playerNumEl  = document.getElementById('oraclePlayerNum');
+  var oStatChunks  = document.getElementById('oStatChunks');
+  var oStatArea    = document.getElementById('oStatArea');
+  var oStatFinds   = document.getElementById('oStatFinds');
+  var oStatPlayers = document.getElementById('oStatPlayers');
+  var hotspotTable = document.getElementById('oracleHotspotTable');
+  var findsFeed    = document.getElementById('oracleFindsFeed');
+  var playerGrid   = document.getElementById('oraclePlayerGrid');
+  var familyTabs   = document.getElementById('oracleFamilyTabs');
+  var refreshBtn   = document.getElementById('oracleRefreshBtn');
+
+  if (!hotspotTable) return;
+
+  var _activeFamily  = 'diamond';
+  var _allHotspots   = {};
+  var _players       = [];
+  var _recentFinds   = [];
+  var MAX_FEED       = 40;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '—';
+    try { return new Date(iso).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' }); }
+    catch (_) { return '—'; }
+  }
+
+  function fmtNum(n) { return Number(n || 0).toLocaleString(); }
+
+  function flashStat(el) {
+    if (!el) return;
+    el.classList.add('updated');
+    setTimeout(function () { el.classList.remove('updated'); }, 800);
+  }
+
+  function fmtFamily(f) {
+    return (f || '').replace(/_/g,' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  function updateStats(exploration, findCount, playerCount) {
+    if (!exploration) return;
+    var chunks = exploration.totalChunks    || 0;
+    var area   = exploration.approxBlockArea || 0;
+    if (chunkNumEl)  chunkNumEl.textContent  = fmtNum(chunks);
+    if (findsNumEl)  findsNumEl.textContent  = fmtNum(findCount  || 0);
+    if (playerNumEl) playerNumEl.textContent = fmtNum(playerCount || 0);
+    if (oStatChunks)  { oStatChunks.textContent  = fmtNum(chunks);        flashStat(oStatChunks); }
+    if (oStatArea)    { oStatArea.textContent     = fmtNum(area);          flashStat(oStatArea); }
+    if (oStatFinds)   { oStatFinds.textContent    = fmtNum(findCount||0);  flashStat(oStatFinds); }
+    if (oStatPlayers) { oStatPlayers.textContent  = fmtNum(playerCount||0);flashStat(oStatPlayers); }
+  }
+
+  // ── Hotspot table ─────────────────────────────────────────────────────────
+  function renderHotspots(family, spots) {
+    if (!hotspotTable) return;
+    if (!spots || !spots.length) {
+      hotspotTable.innerHTML = '<div class="oracle-table-empty">No ' + esc(fmtFamily(family)) +
+        ' finds recorded yet. Connect the bot and start scanning to generate predictions.</div>';
+      return;
+    }
+    hotspotTable.innerHTML = spots.map(function (s, i) {
+      var conf = s.confidence || 0;
+      return '<div class="oracle-hotspot-row">' +
+        '<div class="oracle-hotspot-rank">#' + (i + 1) + '</div>' +
+        '<div class="oracle-hotspot-family">' + esc(fmtFamily(s.family || family)) + '</div>' +
+        '<div class="oracle-hotspot-coord">X ' + esc(s.x) + '</div>' +
+        '<div class="oracle-hotspot-coord">Y ' + esc(s.y) + '</div>' +
+        '<div class="oracle-hotspot-coord">Z ' + esc(s.z) + '</div>' +
+        '<div class="oracle-hotspot-conf">' +
+          '<div class="oracle-conf-bar"><div class="oracle-conf-fill" style="width:' + conf + '%"></div></div>' +
+          '<span class="oracle-conf-pct">' + conf + '%</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function setActiveFamily(family) {
+    _activeFamily = family;
+    if (familyTabs) {
+      familyTabs.querySelectorAll('.oracle-tab').forEach(function (t) {
+        t.classList.toggle('active', t.getAttribute('data-family') === family);
+      });
+    }
+    renderHotspots(family, _allHotspots[family] || []);
+  }
+
+  // ── Recent finds feed ─────────────────────────────────────────────────────
+  function renderFindsFeed() {
+    if (!findsFeed) return;
+    if (!_recentFinds.length) {
+      findsFeed.innerHTML = '<div class="oracle-table-empty">No discoveries yet.</div>';
+      return;
+    }
+    findsFeed.innerHTML = _recentFinds.slice(0, MAX_FEED).map(function (f) {
+      return '<div class="oracle-find-row">' +
+        '<span class="oracle-find-time">' + fmtTime(f.foundAt) + '</span>' +
+        '<span class="oracle-find-type">' + esc(f.type || f.family || '?') + '</span>' +
+        '<span class="oracle-find-x">X ' + esc(f.x) + '</span>' +
+        '<span class="oracle-find-y">Y ' + esc(f.y) + '</span>' +
+        '<span class="oracle-find-z">Z ' + esc(f.z) + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  function prependFind(f) {
+    f.foundAt = f.foundAt || new Date().toISOString();
+    _recentFinds.unshift(f);
+    if (_recentFinds.length > MAX_FEED) _recentFinds.length = MAX_FEED;
+    if (!findsFeed) return;
+    var empty = findsFeed.querySelector('.oracle-table-empty');
+    if (empty) empty.remove();
+    var row = document.createElement('div');
+    row.className = 'oracle-find-row';
+    row.innerHTML =
+      '<span class="oracle-find-time">' + fmtTime(f.foundAt) + '</span>' +
+      '<span class="oracle-find-type">' + esc(f.blockType || f.type || f.family || '?') + '</span>' +
+      '<span class="oracle-find-x">X ' + esc(f.x) + '</span>' +
+      '<span class="oracle-find-y">Y ' + esc(f.y) + '</span>' +
+      '<span class="oracle-find-z">Z ' + esc(f.z) + '</span>';
+    findsFeed.insertBefore(row, findsFeed.firstChild);
+    var rows = findsFeed.querySelectorAll('.oracle-find-row');
+    if (rows.length > MAX_FEED) findsFeed.removeChild(findsFeed.lastChild);
+  }
+
+  // ── Player cards ──────────────────────────────────────────────────────────
+  function renderPlayerGrid() {
+    if (!playerGrid) return;
+    if (!_players.length) {
+      playerGrid.innerHTML = '<div class="oracle-table-empty">No players profiled yet. The oracle samples positions every 30 s once bots are connected.</div>';
+      return;
+    }
+    playerGrid.innerHTML = _players.map(function (p) {
+      var style = p.playStyle || 'UNKNOWN';
+      var sigs  = p.styleSignals || {};
+      var hz    = p.homeZone;
+      var sigHtml = ['miner','fighter','explorer','trader'].map(function (k) {
+        return '<div class="oracle-player-stat"><span>' + k[0].toUpperCase() + k.slice(1) + ' signals</span>' +
+          '<span>' + (sigs[k] || 0) + '</span></div>';
+      }).join('');
+      var hzHtml = hz
+        ? '<div class="oracle-player-homezone">Home zone: <strong>X ' + hz.x + ' Z ' + hz.z + '</strong> (' + (hz.visits || 1) + ' visits)</div>'
+        : '<div class="oracle-player-homezone">Home zone: <strong>undetermined</strong></div>';
+      return '<div class="oracle-player-card">' +
+        '<div class="oracle-player-header">' +
+          '<span class="oracle-player-name">' + esc(p.username) + '</span>' +
+          '<span class="oracle-style-badge ' + esc(style) + '">' + esc(style) + '</span>' +
+        '</div>' +
+        '<div class="oracle-player-stats">' +
+          '<div class="oracle-player-stat"><span>Sightings</span><span>' + (p.sightingCount || 0) + '</span></div>' +
+          '<div class="oracle-player-stat"><span>Dimension</span><span>' + esc(p.dimension || 'overworld') + '</span></div>' +
+          '<div class="oracle-player-stat"><span>Last seen</span><span>' + fmtTime(p.lastSeen) + '</span></div>' +
+          sigHtml +
+        '</div>' +
+        hzHtml +
+      '</div>';
+    }).join('');
+  }
+
+  // ── Apply oracle:status snapshot ──────────────────────────────────────────
+  function applyStatus(data) {
+    if (!data) return;
+    updateStats(data.exploration, data.resourceFindCount, data.playerCount);
+    if (data.recentFinds) {
+      _recentFinds = data.recentFinds.slice(0, MAX_FEED);
+      renderFindsFeed();
+    }
+  }
+
+  // ── REST loaders ──────────────────────────────────────────────────────────
+  async function loadHotspots() {
+    try {
+      var r = await fetch('/bot-api/oracle/hotspots?limit=5', { cache: 'no-store' });
+      if (!r.ok) return;
+      var body = await r.json();
+      if (body.hotspots) {
+        _allHotspots = body.hotspots;
+        renderHotspots(_activeFamily, _allHotspots[_activeFamily] || []);
+      }
+    } catch (_) {}
+  }
+
+  async function loadPlayers() {
+    try {
+      var r = await fetch('/bot-api/oracle/players', { cache: 'no-store' });
+      if (!r.ok) return;
+      var body = await r.json();
+      if (body.players) { _players = body.players; renderPlayerGrid(); }
+    } catch (_) {}
+  }
+
+  async function loadStatus() {
+    try {
+      var r = await fetch('/bot-api/oracle/status', { cache: 'no-store' });
+      if (!r.ok) return;
+      applyStatus(await r.json());
+    } catch (_) {}
+  }
+
+  async function refresh() {
+    await Promise.all([loadStatus(), loadHotspots(), loadPlayers()]);
+  }
+
+  // ── Socket.IO live events ─────────────────────────────────────────────────
+  if (typeof socket !== 'undefined') {
+    socket.on('oracle:find', function (data) {
+      if (!data) return;
+      prependFind(data);
+      loadHotspots();
+    });
+    socket.on('oracle:status', function (data) {
+      applyStatus(data);
+    });
+  }
+
+  // ── Family tabs ───────────────────────────────────────────────────────────
+  if (familyTabs) {
+    familyTabs.addEventListener('click', function (e) {
+      var btn = e.target.closest('.oracle-tab');
+      if (!btn) return;
+      var f = btn.getAttribute('data-family');
+      if (f) {
+        setActiveFamily(f);
+        if (!_allHotspots[f] || !_allHotspots[f].length) loadHotspots();
+      }
+    });
+  }
+
+  // ── Refresh button ────────────────────────────────────────────────────────
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', function () {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = 'Loading…';
+      refresh().finally(function () {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = 'Refresh';
+      });
+    });
+  }
+
+  // ── Initial load + 30 s auto-poll ────────────────────────────────────────
+  refresh();
+  setInterval(refresh, 30000);
 
 })();

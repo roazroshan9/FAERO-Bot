@@ -954,6 +954,59 @@ function mountRoutes(app, io, botManager) {
       res.status(500).json({ ok: false, error: err.message });
     }
   });
+
+  // ── World Oracle REST API ────────────────────────────────────────────────
+
+  const worldOracle = require('../modules/worldOracle');
+
+  app.get('/bot-api/oracle/status', (_req, res) => {
+    try {
+      res.json({ ok: true, ...worldOracle.getStatus() });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/bot-api/oracle/hotspots', (_req, res) => {
+    try {
+      const limit  = parseInt(_req.query.limit, 10) || 5;
+      const family = _req.query.family;
+      if (family) {
+        res.json({ ok: true, family, hotspots: worldOracle.predictHotspots(family, limit) });
+      } else {
+        res.json({ ok: true, hotspots: worldOracle.getAllHotspots(limit) });
+      }
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/bot-api/oracle/finds', (_req, res) => {
+    try {
+      const limit = parseInt(_req.query.limit, 10) || 50;
+      res.json({ ok: true, finds: worldOracle.getRecentFinds(limit) });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/bot-api/oracle/players', (_req, res) => {
+    try {
+      res.json({ ok: true, players: worldOracle.getPlayerProfiles() });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/bot-api/oracle/player/:username', (_req, res) => {
+    try {
+      const profile = worldOracle.getPlayerProfile(_req.params.username);
+      if (!profile) return res.status(404).json({ ok: false, error: 'not found' });
+      res.json({ ok: true, profile });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
 }
 
 function buildConfigSummary(botManager) {
