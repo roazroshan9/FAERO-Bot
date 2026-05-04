@@ -33,6 +33,7 @@ const { AreaScanner, SCAN_RANGE } = require('./scanner');
 const securityLog                 = require('../core/securityLog');
 const goalPlanner                 = require('../ai/goalPlanner');
 const chatResponder               = require('../ai/chatResponder');
+const autoBuild                   = require('./autoBuild');
 
 // ─── Module-level scanner singleton (per-process; attached to ctx.manager) ────
 // Using a module singleton ensures `!mineblock` and `!mode mine` share the same
@@ -406,6 +407,13 @@ function parseIntent(text) {
   // ── Build ─────────────────────────────────────────────────────────────────
   m = text.match(/^build\s+(house|wall|bridge)$/);
   if (m) return { cmd: 'build', structure: m[1] };
+
+  m = text.match(/^build\s+schematic\s+([a-z0-9_-]+)$/);
+  if (m) return { cmd: 'build_schematic', schematicName: m[1] };
+
+  if (/^build\s+(stop|cancel)$/.test(text)) return { cmd: 'build_stop' };
+  if (/^build\s+(status|progress)$/.test(text)) return { cmd: 'build_status' };
+  if (/^build\s+(list|schematics?)$/.test(text)) return { cmd: 'build_list' };
 
   // ── Give ──────────────────────────────────────────────────────────────────
   m = text.match(/^give\s+([a-z0-9_]+)(?:\s+(\d+))?$/);
@@ -1237,6 +1245,70 @@ function handleCommand(ctx, username, message, tier) {
           ' blocks (' + result.type + ').'
         );
       });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // AUTO BUILD — schematic executor
+    // ════════════════════════════════════════════════════════════════════════
+
+    case 'build_schematic': {
+      const schemName = intent.schematicName;
+      // Validate the name before queuing
+      const available = autoBuild.listSchematics();
+      if (!available.includes(schemName)) {
+        say(bot, 'Unknown schematic "' + schemName + '". Available: ' + available.join(', ') + '. Or use /bot-api/build/run with a custom JSON schematic.');
+        return false;
+      }
+      return commandTask('Build Schematic: ' + schemName, async () => {
+        say(bot, 'Loading schematic "' + schemName + '"…');
+        const result = await autoBuild.executeBuild(bot, schemName, {
+          onLog: (msg) => { if (ctx.manager) ctx.manager.log(msg); },
+          onProgress: ({ placed, total }) => {
+            if (placed > 0 && placed % 10 === 0) {
+              say(bot, 'Building… ' + placed + ' / ' + total + ' blocks placed.');
+            }
+          },
+          state,
+          pullChest: true
+        });
+        say(bot,
+          'Build "' + schemName + '" done — ' +
+          result.placed  + ' placed, ' +
+          result.skipped + ' already filled, ' +
+          result.failed  + ' failed.' +
+          (result.cancelled ? ' (cancelled early)' : '')
+        );
+        if (Object.keys(result.missing).length > 0) {
+          const mis = Object.entries(result.missing).map(([t, c]) => c + '×' + t).join(', ');
+          say(bot, 'Missing materials were: ' + mis);
+        }
+      });
+    }
+
+    case 'build_stop': {
+      const stopped = autoBuild.cancelBuild();
+      say(bot, stopped ? 'Build cancelled.' : 'No active build to cancel.');
+      return true;
+    }
+
+    case 'build_status': {
+      const st = autoBuild.getBuildStatus();
+      if (!st.active) {
+        say(bot, 'No active build session.');
+      } else {
+        say(bot,
+          'Building "' + st.name + '": ' +
+          st.placed + '/' + st.total + ' placed, ' +
+          st.failed + ' failed, ' +
+          st.remaining + ' remaining.'
+        );
+      }
+      return true;
+    }
+
+    case 'build_list': {
+      say(bot, 'Built-in schematics: ' + autoBuild.listSchematics().join(', '));
+      return true;
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     // DEBUG / DEV TOOLS

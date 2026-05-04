@@ -241,6 +241,70 @@ function mountRoutes(app, io, botManager) {
     }))});
   });
 
+  // ── Auto Build API ──────────────────────────────────────────────────────────
+  const autoBuildMod = require('../modules/autoBuild');
+
+  app.get('/bot-api/build/schematics', (req, res) => {
+    const list = autoBuildMod.listSchematics();
+    res.json({ ok: true, schematics: list });
+  });
+
+  app.get('/bot-api/build/status', (req, res) => {
+    res.json({ ok: true, build: autoBuildMod.getBuildStatus() });
+  });
+
+  app.post('/bot-api/build/cancel', (req, res) => {
+    const cancelled = autoBuildMod.cancelBuild();
+    res.json({ ok: true, cancelled, message: cancelled ? 'Build cancelled.' : 'No active build.' });
+  });
+
+  app.post('/bot-api/build/run', async (req, res) => {
+    const bot = botManager.bot;
+    if (!bot || !bot.entity) {
+      return res.status(409).json({ ok: false, error: 'Bot is offline or has not spawned yet.' });
+    }
+
+    const { name, schematic } = req.body || {};
+    const input = name || schematic;
+    if (!input) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Provide "name" (built-in schematic name) or "schematic" (object or JSON string).'
+      });
+    }
+
+    // Validate + parse before accepting the request, so bad input fails fast
+    let parsed;
+    try {
+      parsed = autoBuildMod.parseSchematic(input, bot.entity.position);
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+
+    botManager.log('[autoBuild] API: queued build "' + parsed.name + '" — ' + parsed.blocks.length + ' blocks');
+
+    // Respond immediately — the build runs asynchronously via the task queue
+    res.json({
+      ok: true,
+      message: 'Build "' + parsed.name + '" queued (' + parsed.blocks.length + ' blocks). Poll GET /bot-api/build/status for progress.',
+      name: parsed.name,
+      blocks: parsed.blocks.length
+    });
+
+    botManager.taskQueue.push('Build: ' + parsed.name, async () => {
+      await autoBuildMod.executeBuild(bot, input, {
+        onLog: (msg) => botManager.log(msg),
+        onProgress: ({ placed, total, name: bName }) => {
+          if (placed > 0 && placed % 5 === 0) {
+            botManager.log('[autoBuild] ' + bName + ': ' + placed + '/' + total + ' placed');
+          }
+        },
+        state:     botManager.stateManager,
+        pullChest: true
+      });
+    }, { priority: 3 });
+  });
+
   app.post('/bot-api/test-proxy', async (req, res) => {
     const { SocksClient } = require('socks');
     const proxyUrl = String((req.body && req.body.proxy) || '').trim();

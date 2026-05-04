@@ -81,6 +81,39 @@ Set these environment variables before running when needed:
 - `MEMORY_CLEANUP_INTERVAL_MS` — minimum interval between lightweight memory cleanup passes, defaults to `60000`
 - `MEMORY_MAX_ATTACKERS`, `MEMORY_MAX_PAYMENTS`, `MEMORY_MAX_FACTS` — hard caps for stored bot memory maps, default to `50`
 
+## Auto Build Module (`modules/autoBuild.js`)
+
+Schematic-based block placement system with pathfinding, inventory management, and chest-pull fallback.
+
+**Built-in schematics:** `platform_5x5` (5×5 flat platform), `tower_3x3` (3×3 tower, 5 tall), `house_small` (7×7 walled outline with doorway), `staircase_8` (8-step solid staircase)
+
+**Custom schematic format:**
+```json
+{ "name": "my_build", "relative": true,
+  "blocks": [{ "dx": 0, "dy": 0, "dz": 0, "type": "oak_planks" }] }
+```
+Relative (`dx/dy/dz`) offsets from the bot's current position; or absolute (`x/y/z`) world coords with `"relative": false`.
+
+**In-game commands (ADMIN tier):**
+- `!build schematic <name>` — run a built-in schematic
+- `!build status` — show placed/remaining/failed counts
+- `!build stop` — cancel the running build
+- `!build list` — list all built-in schematic names
+
+**Dashboard REST API:**
+- `GET  /bot-api/build/schematics` — list built-in names
+- `GET  /bot-api/build/status` — live progress
+- `POST /bot-api/build/cancel` — cancel active build
+- `POST /bot-api/build/run` — run a build; body: `{ "name": "platform_5x5" }` or `{ "schematic": {...} }`
+
+**Behaviour:**
+- Blocks sorted bottom-up by Y so foundations are always placed first
+- Navigates within 4 blocks of each target using `GoalNear`; tries all 6 faces to find a solid reference
+- Checks inventory before starting; tries to pull missing items from nearest chest/barrel within 16 blocks
+- Reports missing materials in chat after completion
+- Uses `antiDetection.jitter` (180–520 ms) between successful placements
+- Module-level `_session` singleton — only one build runs at a time; new build cancels previous
+
 ## Recent Updates
 
 - Fixed `ai/decisionEngine.js` so `think`, `decide`, and `act` are separate functions exported as `module.exports = { act, think, decide }`.
