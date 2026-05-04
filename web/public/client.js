@@ -1971,128 +1971,262 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
   // ── Fleet Radar Canvas ──────────────────────────────────────────────────
   var radarCanvas = document.getElementById('radarCanvas');
   var radarCtx = radarCanvas ? radarCanvas.getContext('2d') : null;
-  var _radarData = { leader: null, minions: [] };
+  var _radarData = { leader: null, minions: [], threats: [], enemies: [] };
   var RADAR_RANGE = 128; // blocks radius shown on radar
 
-  function drawRadar(leaderPos, minionPositions) {
-    if (!radarCtx) return;
-    var W = radarCanvas.width;
-    var H = radarCanvas.height;
-    var cx = W / 2;
-    var cy = H / 2;
-    var r  = W / 2 - 2;
-
-    radarCtx.clearRect(0, 0, W, H);
-
-    // Background circle
-    radarCtx.save();
-    radarCtx.beginPath();
-    radarCtx.arc(cx, cy, r, 0, Math.PI * 2);
-    radarCtx.fillStyle = 'rgba(0, 10, 12, 0.88)';
-    radarCtx.fill();
-    radarCtx.clip();
-
-    // Grid rings
-    radarCtx.strokeStyle = 'rgba(0,255,255,0.10)';
-    radarCtx.lineWidth = 1;
-    [0.25, 0.5, 0.75, 1.0].forEach(function (frac) {
-      radarCtx.beginPath();
-      radarCtx.arc(cx, cy, r * frac, 0, Math.PI * 2);
-      radarCtx.stroke();
-    });
-
-    // Sweep line (rotating)
-    var angle = (Date.now() / 2200) * Math.PI * 2;
-    var grad = radarCtx.createConicalGradient
-      ? null
-      : null;
-    radarCtx.save();
-    radarCtx.translate(cx, cy);
-    radarCtx.rotate(angle);
-    var sweepGrad = radarCtx.createLinearGradient(0, 0, r, 0);
-    sweepGrad.addColorStop(0, 'rgba(0,255,255,0.45)');
-    sweepGrad.addColorStop(1, 'rgba(0,255,255,0)');
-    radarCtx.beginPath();
-    radarCtx.moveTo(0, 0);
-    radarCtx.arc(0, 0, r, -0.18, 0.18);
-    radarCtx.closePath();
-    radarCtx.fillStyle = sweepGrad;
-    radarCtx.fill();
-    radarCtx.restore();
-
-    function worldToRadar(dx, dz) {
-      var px = cx + (dx / RADAR_RANGE) * r;
-      var py = cy + (dz / RADAR_RANGE) * r;
-      return { x: px, y: py };
-    }
-
-    // Minions
-    minionPositions.forEach(function (pos) {
-      if (!leaderPos || !pos) return;
-      var dx = pos.x - leaderPos.x;
-      var dz = pos.z - leaderPos.z;
-      var p = worldToRadar(dx, dz);
-      if (p.x < 2 || p.x > W - 2 || p.y < 2 || p.y > H - 2) return;
-      radarCtx.beginPath();
-      radarCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
-      radarCtx.fillStyle = '#00ffff';
-      radarCtx.shadowColor = '#00ffff';
-      radarCtx.shadowBlur = 8;
-      radarCtx.fill();
-      radarCtx.shadowBlur = 0;
-    });
-
-    // Leader (always center)
-    if (leaderPos) {
-      radarCtx.beginPath();
-      radarCtx.arc(cx, cy, 6, 0, Math.PI * 2);
-      radarCtx.fillStyle = '#39FF14';
-      radarCtx.shadowColor = '#39FF14';
-      radarCtx.shadowBlur = 12;
-      radarCtx.fill();
-      radarCtx.shadowBlur = 0;
-    }
-
-    radarCtx.restore();
-  }
-
+  // ── Parse position from string "x, y, z" or object ─────────────────────
   function parsePosition(posStr) {
-    if (!posStr || typeof posStr !== 'string') return null;
+    if (!posStr) return null;
+    if (typeof posStr === 'object' && posStr.x !== undefined) return posStr;
+    if (typeof posStr !== 'string') return null;
     var parts = posStr.match(/-?\d+(\.\d+)?/g);
     if (!parts || parts.length < 3) return null;
     return { x: parseFloat(parts[0]), y: parseFloat(parts[1]), z: parseFloat(parts[2]) };
   }
 
+  // ── Radar draw ───────────────────────────────────────────────────────────
+  function drawRadar() {
+    if (!radarCtx) return;
+    var W  = radarCanvas.width;
+    var H  = radarCanvas.height;
+    var cx = W / 2;
+    var cy = H / 2;
+    var r  = W / 2 - 2;
+    var t  = Date.now();
+
+    radarCtx.clearRect(0, 0, W, H);
+
+    // ── Background ──────────────────────────────────────────────────────────
+    radarCtx.save();
+    radarCtx.beginPath();
+    radarCtx.arc(cx, cy, r, 0, Math.PI * 2);
+
+    // Radial background gradient
+    var bgGrad = radarCtx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    bgGrad.addColorStop(0,   'rgba(0,30,20,0.92)');
+    bgGrad.addColorStop(0.7, 'rgba(0,12,10,0.95)');
+    bgGrad.addColorStop(1,   'rgba(0,5,5,0.98)');
+    radarCtx.fillStyle = bgGrad;
+    radarCtx.fill();
+    radarCtx.clip();
+
+    // ── Grid rings ──────────────────────────────────────────────────────────
+    [0.25, 0.5, 0.75, 1.0].forEach(function (frac, i) {
+      radarCtx.beginPath();
+      radarCtx.arc(cx, cy, r * frac, 0, Math.PI * 2);
+      radarCtx.strokeStyle = i === 3
+        ? 'rgba(0,255,255,0.18)'
+        : 'rgba(0,255,255,0.07)';
+      radarCtx.lineWidth = i === 3 ? 1.5 : 0.8;
+      radarCtx.stroke();
+    });
+
+    // Cross-hairs
+    radarCtx.strokeStyle = 'rgba(0,255,255,0.10)';
+    radarCtx.lineWidth = 0.8;
+    radarCtx.setLineDash([4, 6]);
+    radarCtx.beginPath();
+    radarCtx.moveTo(cx, cy - r); radarCtx.lineTo(cx, cy + r);
+    radarCtx.moveTo(cx - r, cy); radarCtx.lineTo(cx + r, cy);
+    radarCtx.stroke();
+    radarCtx.setLineDash([]);
+
+    // ── Rotating sweep ──────────────────────────────────────────────────────
+    var sweepAngle = (t / 2200) * Math.PI * 2;
+    radarCtx.save();
+    radarCtx.translate(cx, cy);
+    radarCtx.rotate(sweepAngle);
+
+    // Sweep cone (fan-shape gradient)
+    var fanWidth = 0.55;
+    var sweepGrad = radarCtx.createLinearGradient(0, 0, r, 0);
+    sweepGrad.addColorStop(0,   'rgba(0,255,180,0.38)');
+    sweepGrad.addColorStop(0.6, 'rgba(0,255,120,0.18)');
+    sweepGrad.addColorStop(1,   'rgba(0,255,100,0)');
+    radarCtx.beginPath();
+    radarCtx.moveTo(0, 0);
+    radarCtx.arc(0, 0, r, -fanWidth / 2, fanWidth / 2);
+    radarCtx.closePath();
+    radarCtx.fillStyle = sweepGrad;
+    radarCtx.fill();
+
+    // Bright leading edge line
+    radarCtx.beginPath();
+    radarCtx.moveTo(0, 0);
+    radarCtx.lineTo(r, 0);
+    radarCtx.strokeStyle = 'rgba(0,255,200,0.65)';
+    radarCtx.lineWidth = 1.5;
+    radarCtx.stroke();
+
+    radarCtx.restore();
+
+    // ── Helper: world to radar pixel ────────────────────────────────────────
+    function worldToRadar(dx, dz) {
+      return {
+        x: cx + (dx / RADAR_RANGE) * r,
+        y: cy + (dz / RADAR_RANGE) * r
+      };
+    }
+
+    function inBounds(p) {
+      var dx = p.x - cx;
+      var dy = p.y - cy;
+      return dx * dx + dy * dy <= r * r;
+    }
+
+    var leaderPos = _radarData.leader;
+
+    // ── Danger zone threat rings (red pulsing) ──────────────────────────────
+    _radarData.threats.forEach(function (threat) {
+      if (!leaderPos || !threat) return;
+      var dx = threat.x - leaderPos.x;
+      var dz = threat.z - leaderPos.z;
+      var p = worldToRadar(dx, dz);
+      if (!inBounds(p)) return;
+
+      // Outer pulsing ring
+      var pulse = 0.45 + 0.55 * Math.abs(Math.sin(t / 500 + threat.x * 0.1));
+      radarCtx.beginPath();
+      radarCtx.arc(p.x, p.y, 9 + 4 * pulse, 0, Math.PI * 2);
+      radarCtx.strokeStyle = 'rgba(255,49,95,' + (0.18 * pulse).toFixed(2) + ')';
+      radarCtx.lineWidth = 1.5;
+      radarCtx.stroke();
+
+      // Inner core dot
+      radarCtx.beginPath();
+      radarCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      radarCtx.fillStyle = '#ff315f';
+      radarCtx.shadowColor = '#ff315f';
+      radarCtx.shadowBlur = 10 + 6 * pulse;
+      radarCtx.fill();
+      radarCtx.shadowBlur = 0;
+    });
+
+    // ── Known enemies (orange, smaller) ────────────────────────────────────
+    _radarData.enemies.forEach(function (enemy) {
+      if (!leaderPos || !enemy || !enemy.pos) return;
+      var pos = parsePosition(enemy.pos);
+      if (!pos) return;
+      var dx = pos.x - leaderPos.x;
+      var dz = pos.z - leaderPos.z;
+      var p = worldToRadar(dx, dz);
+      if (!inBounds(p)) return;
+
+      var pulse2 = 0.5 + 0.5 * Math.abs(Math.sin(t / 700 + pos.z * 0.08));
+      radarCtx.beginPath();
+      radarCtx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+      radarCtx.fillStyle = '#ff8c00';
+      radarCtx.shadowColor = '#ff8c00';
+      radarCtx.shadowBlur = 8 + 4 * pulse2;
+      radarCtx.fill();
+      radarCtx.shadowBlur = 0;
+    });
+
+    // ── Minion bots (cyan) ──────────────────────────────────────────────────
+    _radarData.minions.forEach(function (pos) {
+      if (!leaderPos || !pos) return;
+      var dx = pos.x - leaderPos.x;
+      var dz = pos.z - leaderPos.z;
+      var p = worldToRadar(dx, dz);
+      if (!inBounds(p)) return;
+
+      radarCtx.beginPath();
+      radarCtx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      radarCtx.fillStyle = '#00ffff';
+      radarCtx.shadowColor = '#00ffff';
+      radarCtx.shadowBlur = 9;
+      radarCtx.fill();
+      radarCtx.shadowBlur = 0;
+
+      // Minion label tick
+      radarCtx.beginPath();
+      radarCtx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+      radarCtx.strokeStyle = 'rgba(0,255,255,0.25)';
+      radarCtx.lineWidth = 0.8;
+      radarCtx.stroke();
+    });
+
+    // ── Leader (bright green, center) ───────────────────────────────────────
+    if (leaderPos) {
+      // Outer ring
+      radarCtx.beginPath();
+      radarCtx.arc(cx, cy, 10, 0, Math.PI * 2);
+      radarCtx.strokeStyle = 'rgba(57,255,20,0.30)';
+      radarCtx.lineWidth = 1;
+      radarCtx.stroke();
+
+      // Core
+      radarCtx.beginPath();
+      radarCtx.arc(cx, cy, 5.5, 0, Math.PI * 2);
+      radarCtx.fillStyle = '#39FF14';
+      radarCtx.shadowColor = '#39FF14';
+      radarCtx.shadowBlur = 16;
+      radarCtx.fill();
+      radarCtx.shadowBlur = 0;
+    }
+
+    radarCtx.restore();
+
+    // Update canvas border glow when threats present
+    if (radarCanvas) {
+      if (_radarData.threats.length > 0 || _radarData.enemies.length > 0) {
+        radarCanvas.classList.add('threat-active');
+      } else {
+        radarCanvas.classList.remove('threat-active');
+      }
+    }
+  }
+
+  // ── Data fetching ────────────────────────────────────────────────────────
   async function fetchRadarData() {
+    // Fleet minion positions
     try {
-      var r = await fetch('/bot-api/fleet/status', { cache: 'no-store' });
-      if (r.ok) {
-        var d = await r.json();
+      var rf = await fetch('/bot-api/fleet/status', { cache: 'no-store' });
+      if (rf.ok) {
+        var df = await rf.json();
         var minions = [];
-        (d.bots || []).forEach(function (b) {
+        (df.bots || []).forEach(function (b) {
           if (b.position) {
-            var p = typeof b.position === 'string' ? parsePosition(b.position) : b.position;
+            var p = parsePosition(b.position);
             if (p) minions.push(p);
           }
         });
         _radarData.minions = minions;
       }
     } catch (_) {}
+
+    // Leader position
     try {
       var rs = await fetch('/bot-api/status', { cache: 'no-store' });
       if (rs.ok) {
         var ds = await rs.json();
-        if (ds.position) {
-          _radarData.leader = typeof ds.position === 'string'
-            ? parsePosition(ds.position)
-            : ds.position;
-        }
+        if (ds.position) _radarData.leader = parsePosition(ds.position);
+      }
+    } catch (_) {}
+
+    // Hive threats: danger zones + known enemies
+    try {
+      var rh = await fetch('/bot-api/hive/status', { cache: 'no-store' });
+      if (rh.ok) {
+        var dh = await rh.json();
+        var hive = dh.hive || dh;
+
+        // Danger zones — stored as {x, y, z, reason}
+        var zones = hive.dangerZones || hive.danger_zones || [];
+        _radarData.threats = zones.map(function (z) {
+          return { x: z.x, y: z.y, z: z.z };
+        });
+
+        // Known enemies — stored as {name, pos, lastSeen}
+        var enemies = hive.enemies || hive.knownEnemies || [];
+        _radarData.enemies = enemies;
       }
     } catch (_) {}
   }
 
+  // ── Radar animation loop ─────────────────────────────────────────────────
   function radarLoop() {
-    drawRadar(_radarData.leader, _radarData.minions);
+    drawRadar();
     requestAnimationFrame(radarLoop);
   }
 
@@ -2100,14 +2234,34 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
     radarLoop();
     fetchRadarData();
     setInterval(function () { if (!document.hidden) fetchRadarData(); }, 3000);
-    // Also update leader position from socket
+
+    // Live leader position from socket
     if (typeof socket !== 'undefined') {
       socket.on('status', function (data) {
         if (data && data.position) {
-          var p = typeof data.position === 'string'
-            ? parsePosition(data.position)
-            : data.position;
+          var p = parsePosition(data.position);
           if (p) _radarData.leader = p;
+        }
+      });
+
+      // Live hive intel: threat updates
+      socket.on('hive:update', function (data) {
+        if (!data) return;
+        if (data.dangerZones) {
+          _radarData.threats = data.dangerZones.map(function (z) {
+            return { x: z.x, y: z.y, z: z.z };
+          });
+        }
+        if (data.enemies) {
+          _radarData.enemies = data.enemies;
+        }
+      });
+
+      // Tactical socket events that signal enemy contact
+      socket.on('tactical:engage', function (data) {
+        // Flash the radar border on combat start
+        if (radarCanvas) {
+          radarCanvas.classList.add('threat-active');
         }
       });
     }
