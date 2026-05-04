@@ -904,6 +904,56 @@ function mountRoutes(app, io, botManager) {
     tacticalCombat.abortEngage();
     res.json({ ok: true, message: 'Engage aborted' });
   });
+
+  // ── Neural Social Engine API ───────────────────────────────────────────────
+
+  const socialEngine = require('../modules/socialEngine');
+
+  app.get('/bot-api/social/profiles', (req, res) => {
+    const profiles = socialEngine.getAllProfiles();
+    res.json({ ok: true, profiles, total: profiles.length });
+  });
+
+  app.get('/bot-api/social/profile/:username', async (req, res) => {
+    const username = String(req.params.username || '').trim();
+    if (!username) return res.status(400).json({ ok: false, error: 'Username is required' });
+    try {
+      await socialEngine.loadProfile(username);
+      const profile = socialEngine.getProfile(username);
+      const history = await socialEngine.getHistory(username);
+      res.json({ ok: true, profile: { ...profile, history } });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/social/profile/:username/reset', async (req, res) => {
+    const username = String(req.params.username || '').trim();
+    if (!username) return res.status(400).json({ ok: false, error: 'Username is required' });
+    try {
+      await socialEngine.clearProfile(username);
+      res.json({ ok: true, message: 'Social profile reset for ' + username });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/social/profile/:username/interaction', async (req, res) => {
+    const username = String(req.params.username || '').trim();
+    const type     = String((req.body && req.body.type) || 'neutral_chat').trim();
+    if (!username) return res.status(400).json({ ok: false, error: 'Username is required' });
+    const allowed = Object.keys(socialEngine.RAPPORT_DELTA);
+    if (!allowed.includes(type)) {
+      return res.status(400).json({ ok: false, error: 'Invalid type. Allowed: ' + allowed.join(', ') });
+    }
+    try {
+      const result = await socialEngine.recordInteraction(username, type, { role: 'user' });
+      io.emit('social:update', result);
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
 }
 
 function buildConfigSummary(botManager) {

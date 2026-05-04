@@ -308,6 +308,9 @@ function attachSocket(io, botManager) {
     io.emit('hive:intel', { type: 'combat', message: entry.message, at: entry.at });
   });
 
+  // ── Neural Social Engine event bridge ─────────────────────────────────────
+  botManager.on('social_update', (data) => io.emit('social:update', data));
+
   // ── Hive Mind event bridge ─────────────────────────────────────────────────
   const hiveMind = require('../core/hiveMind');
   hiveMind.on('hive:intel',  (entry)  => io.emit('hive:intel',  entry));

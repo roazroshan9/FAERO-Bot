@@ -540,10 +540,11 @@ function handleChat(ctx, username, message) {
     if (tier >= roles.TIERS.MANAGER && ctx.manager && ctx.manager.llmChatEnabled && raw.length >= 2) {
       const { think: _think } = require('../ai/decisionEngine');
       const _snap = bot && bot.entity ? _think(bot) : null;
+      // chatResponder.respond() handles humanSay() internally (with typing delay).
+      // Do NOT call say(bot, reply) here — it would double-send the message.
       chatResponder.respond(ctx, username, raw, _snap).then(({ reply, plan }) => {
         if (reply) {
-          say(bot, reply);
-          // Forward to dashboard AI chat feed
+          // Forward to dashboard AI chat feed (for the web panel)
           if (ctx.manager && typeof ctx.manager.emit === 'function') {
             ctx.manager.emit('ai_chat_reply', {
               username, message: raw, reply,

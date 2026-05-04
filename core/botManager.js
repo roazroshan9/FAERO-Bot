@@ -207,6 +207,17 @@ class BotManager extends EventEmitter {
       } catch (err) {
         this.log('Command error: ' + err.message);
       }
+      // ── Neural Social Engine: rapport tracking for all chat ──────────────
+      // Note: chatResponder owns conversation history for AI messages.
+      // botManager only updates rapport score (no history push) for all messages.
+      if (username !== bot.username && !message.startsWith('!')) {
+        const social = require('../modules/socialEngine');
+        const type   = social.inferInteractionType(message);
+        // recordInteraction without opts.message → updates rapport only, no history push
+        social.recordInteraction(username, type).then(result => {
+          this.emit('social_update', { username, type, rapportScore: result.rapportScore, classification: result.classification });
+        }).catch(() => {});
+      }
     });
 
     bot.on('entityHurt', (entity) => {
@@ -215,6 +226,15 @@ class BotManager extends EventEmitter {
       if (attacker && !this.memory.isTrusted(attacker)) {
         this.memory.markAttackedBy(attacker);
         this.log('Marked recent attacker: ' + attacker);
+        // ── Neural Social Engine: physical attack → heavy rapport penalty ─────
+        const social = require('../modules/socialEngine');
+        social.recordInteraction(attacker, 'attack', {
+          message: '[attacked bot]',
+          role:    'user'
+        }).then(result => {
+          this.log('[social] ' + attacker + ' rapport: ' + result.rapportScore + ' (' + result.classification + ')');
+          this.emit('social_update', { username: attacker, type: 'attack', classification: result.classification });
+        }).catch(() => {});
       }
       this._onDangerDetected('took_damage');
     });
