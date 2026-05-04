@@ -1,5 +1,7 @@
 'use strict';
 
+const hiveMind = require('./hiveMind');
+
 /**
  * FAERO — Fleet Manager (core/fleetManager.js)
  *
@@ -278,8 +280,29 @@ class FleetManager extends EventEmitter {
     minion.on('log',          (e) => {
       this.emit('fleet:log', e);
     });
-    minion.on('statusChange', () => this._broadcastNow());
-    minion.on('kicked',       (data) => this.emit('fleet:botKicked', data));
+    minion.on('statusChange', () => {
+      this._broadcastNow();
+      hiveMind.updateBotRef(id, minion.bot);
+    });
+    minion.on('kicked', (data) => this.emit('fleet:botKicked', data));
+
+    // ── Hive Mind: register this minion ──────────────────────────────────────
+    hiveMind.registerBot(id, { role: 'soldier', bot: null, username });
+
+    // Wire minion bot ref into hive once it spawns
+    minion.on('statusChange', () => {
+      if (minion.bot && minion.bot.entity) {
+        hiveMind.updateBotRef(id, minion.bot);
+        // Sync inventory to pool whenever online
+        if (minion.bot.inventory) {
+          const items = {};
+          minion.bot.inventory.items().forEach((it) => {
+            items[it.name] = (items[it.name] || 0) + it.count;
+          });
+          hiveMind.updatePool(id, items);
+        }
+      }
+    });
 
     this._minions.push(minion);
     minion.connect().catch((err) => minion.log('Connect error: ' + err.message));
@@ -297,6 +320,8 @@ class FleetManager extends EventEmitter {
     );
     if (idx === -1) throw new Error('No fleet bot found with id/username "' + idOrUsername + '"');
     const minion = this._minions[idx];
+    // ── Hive Mind: unregister ────────────────────────────────────────────────
+    hiveMind.unregisterBot(minion.id);
     minion.disconnect();
     this._minions.splice(idx, 1);
     this.log('[fleet] Dismissed ' + minion.id + ' (' + minion.username + ')');
@@ -304,6 +329,8 @@ class FleetManager extends EventEmitter {
   }
 
   dismissAll() {
+    // ── Hive Mind: unregister all minions ────────────────────────────────────
+    this._minions.forEach((m) => hiveMind.unregisterBot(m.id));
     this._minions.forEach((m) => m.disconnect());
     this._minions = [];
     this.log('[fleet] All minions dismissed');

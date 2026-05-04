@@ -1,5 +1,6 @@
 const EventEmitter = require('events');
 const path         = require('path');
+const hiveMind     = require('./hiveMind');
 const mineflayer   = require('mineflayer');
 const { SocksClient } = require('socks');
 const pathfinderPlugin   = require('mineflayer-pathfinder').pathfinder;
@@ -175,6 +176,17 @@ class BotManager extends EventEmitter {
         this._farmScheduler.start(bot);
       }
 
+      // ── Hive Mind: register / re-register leader ─────────────────────────────
+      const leaderId = 'leader_' + (bot.username || 'faero');
+      this._hiveMindId = leaderId;
+      if (!hiveMind._bots.has(leaderId)) {
+        hiveMind.registerBot(leaderId, { role: 'leader', bot, username: bot.username || 'faero' });
+      } else {
+        hiveMind.updateBotRef(leaderId, bot);
+      }
+      // Push initial inventory to shared pool
+      this._syncHivePool();
+
       this.emit('bot', this.getStatus());
       this.emit('inventory', this.getInventory());
     });
@@ -215,6 +227,14 @@ class BotManager extends EventEmitter {
       combat.stopCombat(bot);
       this.taskQueue.clear();
       this.stateManager.reset('death');
+
+      // ── Hive Mind: flag death site as a danger zone ───────────────────────
+      if (loc && this._hiveMindId) {
+        hiveMind.reportDangerZone(this._hiveMindId, {
+          x: loc.x, y: loc.y, z: loc.z, reason: 'bot_death:' + cause
+        });
+        hiveMind.completeTask(this._hiveMindId, 'died:' + cause);
+      }
 
       // ── Self-learning: write death to local JSON log ───────────────────────
       if (loc) {
@@ -390,7 +410,20 @@ class BotManager extends EventEmitter {
     bot._webInventoryBridgeAttached = true;
     bot.inventory.on('updateSlot', () => {
       this.emit('inventory', this.getInventory());
+      // ── Hive Mind: sync pool on every inventory change ──────────────────
+      this._syncHivePool();
     });
+  }
+
+  _syncHivePool() {
+    if (!this.bot || !this.bot.inventory || !this._hiveMindId) return;
+    try {
+      const items = {};
+      this.bot.inventory.items().forEach((it) => {
+        items[it.name] = (items[it.name] || 0) + it.count;
+      });
+      hiveMind.updatePool(this._hiveMindId, items);
+    } catch (_) {}
   }
 
   getInventory() {
