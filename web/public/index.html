@@ -438,6 +438,73 @@ reason: waiting</pre>
           </div>
         </div>
 
+        <!-- ── Hive Mind Panel ───────────────────────────────────────── -->
+        <div class="card wide glass-panel hive-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">COLLECTIVE INTELLIGENCE</p>
+            <span class="pulse-dot green"></span>
+          </div>
+          <div class="hive-header-row">
+            <h2>Hive Mind</h2>
+            <div class="hive-status-badges">
+              <span class="hive-badge" id="hiveBotCount"><span class="hive-badge-num" id="hiveOnlineBots">0</span>/<span id="hiveTotalBots">0</span> online</span>
+              <span class="hive-badge danger" id="hiveDangerBadge"><span class="hive-badge-num" id="hiveDangerCount">0</span> danger zones</span>
+              <span class="hive-badge warn" id="hiveEnemyBadge"><span class="hive-badge-num" id="hiveEnemyCount">0</span> enemies</span>
+            </div>
+          </div>
+          <p class="chat-help">Shared brain across all fleet bots. Collective memory, real-time resource pool, danger zone registry and intel feed.</p>
+
+          <div class="hive-grid">
+
+            <!-- Bot roster -->
+            <div class="hive-section hive-roster-section">
+              <p class="hive-section-label">FLEET ROSTER</p>
+              <div id="hiveRoster" class="hive-roster">
+                <div class="hive-empty">No bots linked to Hive yet.</div>
+              </div>
+            </div>
+
+            <!-- Resource pool -->
+            <div class="hive-section hive-pool-section">
+              <p class="hive-section-label">COLLECTIVE POOL <span class="hive-section-sub">aggregated inventory</span></p>
+              <div id="hivePool" class="hive-pool-grid">
+                <div class="hive-empty">No inventory data yet.</div>
+              </div>
+            </div>
+
+            <!-- Known enemies -->
+            <div class="hive-section hive-enemies-section">
+              <p class="hive-section-label">KNOWN THREATS</p>
+              <div id="hiveEnemies" class="hive-enemies-list">
+                <div class="hive-empty">No threats tracked.</div>
+              </div>
+            </div>
+
+            <!-- Intel feed -->
+            <div class="hive-section hive-intel-section">
+              <p class="hive-section-label">INTEL FEED <span class="hive-section-sub">live</span></p>
+              <div id="hiveIntelFeed" class="hive-intel-feed"></div>
+            </div>
+
+          </div>
+
+          <!-- Manual controls -->
+          <div class="hive-controls">
+            <p class="hive-section-label">MANUAL CONTROLS</p>
+            <div class="control-row hive-control-row">
+              <button id="hiveBroadcastBtn" class="hive-btn">Broadcast Alert</button>
+              <input id="hiveBroadcastInput" class="hive-input" placeholder="Alert message…" maxlength="120" autocomplete="off">
+            </div>
+            <div class="control-row hive-control-row">
+              <input id="hiveDangerX" class="hive-coord-input" placeholder="X" type="number">
+              <input id="hiveDangerY" class="hive-coord-input" placeholder="Y" type="number">
+              <input id="hiveDangerZ" class="hive-coord-input" placeholder="Z" type="number">
+              <input id="hiveDangerReason" class="hive-input" placeholder="Reason (optional)" maxlength="80" autocomplete="off">
+              <button id="hiveFlagDangerBtn" class="hive-btn danger">Flag Danger Zone</button>
+            </div>
+          </div>
+        </div>
+
         <!-- ── Schematic Lab Panel ────────────────────────────────────── -->
         <div class="card wide glass-panel schematic-lab-panel">
           <div class="panel-title-row">

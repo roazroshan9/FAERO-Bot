@@ -664,6 +664,72 @@ function mountRoutes(app, io, botManager) {
     });
   });
 
+  // ── Hive Mind API ────────────────────────────────────────────────────────
+
+  app.get('/bot-api/hive/status', (req, res) => {
+    const hiveMind = require('../core/hiveMind');
+    res.json({ ok: true, hive: hiveMind.getStatus() });
+  });
+
+  app.get('/bot-api/hive/intel', (req, res) => {
+    const hiveMind = require('../core/hiveMind');
+    const limit = Math.min(Number(req.query.limit) || 40, 120);
+    res.json({ ok: true, intel: hiveMind.getIntelFeed(limit) });
+  });
+
+  app.get('/bot-api/hive/pool', (req, res) => {
+    const hiveMind = require('../core/hiveMind');
+    res.json({ ok: true, pool: hiveMind.getAggregatedPool() });
+  });
+
+  app.get('/bot-api/hive/enemies', (req, res) => {
+    const hiveMind = require('../core/hiveMind');
+    res.json({ ok: true, enemies: hiveMind.getKnownEnemies() });
+  });
+
+  app.get('/bot-api/hive/dangers', (req, res) => {
+    const hiveMind = require('../core/hiveMind');
+    res.json({ ok: true, zones: hiveMind.getDangerZones() });
+  });
+
+  app.post('/bot-api/hive/danger', (req, res) => {
+    try {
+      const hiveMind = require('../core/hiveMind');
+      const { x, y, z, reason } = req.body || {};
+      if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') {
+        return res.status(400).json({ ok: false, error: 'x, y, z are required numbers' });
+      }
+      hiveMind.reportDangerZone('manual', { x, y, z, reason: reason || 'manual_flag' });
+      res.json({ ok: true, message: 'Danger zone flagged at ' + Math.round(x) + ',' + Math.round(y) + ',' + Math.round(z) });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/hive/task', (req, res) => {
+    try {
+      const hiveMind = require('../core/hiveMind');
+      const { botId, task, params } = req.body || {};
+      if (!botId || !task) return res.status(400).json({ ok: false, error: '"botId" and "task" are required' });
+      hiveMind.assignTask(String(botId), String(task), params || {});
+      res.json({ ok: true, message: 'Task "' + task + '" assigned to ' + botId });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/hive/broadcast', (req, res) => {
+    try {
+      const hiveMind = require('../core/hiveMind');
+      const { event, payload } = req.body || {};
+      if (!event) return res.status(400).json({ ok: false, error: '"event" is required' });
+      hiveMind.broadcast(String(event), payload || {});
+      res.json({ ok: true, message: 'Broadcast sent: ' + event });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
   // ── Schematic Lab API ─────────────────────────────────────────────────────
 
   app.post('/bot-api/schematics/validate', (req, res) => {

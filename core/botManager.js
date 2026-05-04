@@ -375,7 +375,19 @@ class BotManager extends EventEmitter {
     this._dangerWatchTimer = setInterval(() => {
       if (!bot.entity) return;
       const mob = combat.nearestHostileMob(bot, DANGER_RANGE);
-      if (mob) this._onDangerDetected('mob_nearby:' + mob.name);
+      if (mob) {
+        this._onDangerDetected('mob_nearby:' + mob.name);
+        // ── Hive Mind: broadcast enemy sighting to entire fleet ──────────────
+        if (this._hiveMindId && mob.position) {
+          hiveMind.reportEnemy(this._hiveMindId, {
+            name: mob.name,
+            x: mob.position.x,
+            y: mob.position.y,
+            z: mob.position.z,
+            threat: 'hostile'
+          });
+        }
+      }
     }, POLL_MS);
   }
 

@@ -1466,6 +1466,226 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
   setInterval(() => { if (!document.hidden) loadFleetStatus(); }, 8000);
 })();
 
+// ── Hive Mind Dashboard ───────────────────────────────────────────────────────
+(function () {
+  'use strict';
+
+  var rosterEl   = document.getElementById('hiveRoster');
+  var poolEl     = document.getElementById('hivePool');
+  var enemiesEl  = document.getElementById('hiveEnemies');
+  var intelEl    = document.getElementById('hiveIntelFeed');
+  var onlineEl   = document.getElementById('hiveOnlineBots');
+  var totalEl    = document.getElementById('hiveTotalBots');
+  var dangerCEl  = document.getElementById('hiveDangerCount');
+  var enemyCEl   = document.getElementById('hiveEnemyCount');
+
+  if (!rosterEl) return;
+
+  var MAX_INTEL = 60;
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function timeAgo(isoStr) {
+    var secs = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+    if (secs < 60)  return secs + 's ago';
+    if (secs < 3600) return Math.floor(secs/60) + 'm ago';
+    return Math.floor(secs/3600) + 'h ago';
+  }
+
+  function fmtTime(isoStr) {
+    var d = new Date(isoStr);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  }
+
+  // ── Render roster ───────────────────────────────────────────────────────────
+  function renderRoster(bots) {
+    if (!bots || !bots.length) {
+      rosterEl.innerHTML = '<div class="hive-empty">No bots linked to Hive yet.</div>';
+      return;
+    }
+    rosterEl.innerHTML = bots.map(function (b) {
+      var hp    = b.health != null ? Math.round(b.health) : null;
+      var pos   = b.position ? 'X' + b.position.x + ' Y' + b.position.y + ' Z' + b.position.z : '—';
+      var task  = b.currentTask
+        ? '<span class="hive-bot-task">' + esc(b.currentTask) + '</span>'
+        : '';
+      var hpStr = hp != null ? '<span class="hive-bot-hp">♥ ' + hp + '</span>' : '';
+      return '<div class="hive-bot-row' + (b.online ? '' : ' hive-bot-offline') + '">' +
+        '<span class="hive-bot-role ' + esc(b.role) + '">' + esc(b.role.toUpperCase()) + '</span>' +
+        '<span class="hive-bot-name">' + esc(b.username) + '</span>' +
+        hpStr +
+        '<span style="font-size:0.68rem;color:var(--muted);">' + esc(pos) + '</span>' +
+        task +
+        '<span style="font-size:0.65rem;color:' + (b.online ? '#39FF14' : '#ff315f') + ';margin-left:auto">' +
+          (b.online ? '● ONLINE' : '○ OFFLINE') + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ── Render resource pool ────────────────────────────────────────────────────
+  function renderPool(pool) {
+    if (!pool || !Object.keys(pool).length) {
+      poolEl.innerHTML = '<div class="hive-empty">No inventory data yet.</div>';
+      return;
+    }
+    poolEl.innerHTML = Object.entries(pool).map(function (kv) {
+      return '<span class="hive-pool-item">' +
+        esc(kv[0].replace(/_/g, ' ')) +
+        ' <span class="hive-pool-count">×' + kv[1] + '</span>' +
+      '</span>';
+    }).join('');
+  }
+
+  // ── Render known enemies ────────────────────────────────────────────────────
+  function renderEnemies(enemies) {
+    if (!enemies || !enemies.length) {
+      enemiesEl.innerHTML = '<div class="hive-empty">No threats tracked.</div>';
+      return;
+    }
+    enemiesEl.innerHTML = enemies.map(function (e) {
+      return '<div class="hive-enemy-row">' +
+        '<span class="hive-enemy-name">' + esc(e.name) + '</span>' +
+        '<span class="hive-enemy-pos">X' + e.x + ' Y' + e.y + ' Z' + e.z + '</span>' +
+        '<span class="hive-enemy-age">' + timeAgo(new Date(e.lastSeen).toISOString()) + '</span>' +
+      '</div>';
+    }).join('');
+  }
+
+  // ── Render intel feed (prepend new entries at top) ──────────────────────────
+  function renderIntel(entries, prepend) {
+    if (!entries || !entries.length) return;
+    if (!prepend) {
+      intelEl.innerHTML = entries.slice().reverse().map(buildIntelRow).join('');
+      return;
+    }
+    var frag = document.createDocumentFragment();
+    entries.slice().reverse().forEach(function (entry) {
+      var div = document.createElement('div');
+      div.innerHTML = buildIntelRow(entry);
+      var row = div.firstChild;
+      if (row) {
+        row.classList.add('hive-intel-new');
+        frag.insertBefore(row, frag.firstChild);
+      }
+    });
+    intelEl.insertBefore(frag, intelEl.firstChild);
+    // Trim overflow
+    while (intelEl.children.length > MAX_INTEL) {
+      intelEl.removeChild(intelEl.lastChild);
+    }
+  }
+
+  function buildIntelRow(entry) {
+    return '<div class="hive-intel-row">' +
+      '<span class="hive-intel-time">' + fmtTime(entry.at) + '</span>' +
+      '<span class="hive-intel-type ' + esc(entry.type || 'system') + '">' + esc(entry.type || 'sys') + '</span>' +
+      '<span class="hive-intel-msg">' + esc(entry.message) + '</span>' +
+    '</div>';
+  }
+
+  // ── Full render from status snapshot ────────────────────────────────────────
+  function applyStatus(hive) {
+    if (!hive) return;
+    if (onlineEl) onlineEl.textContent = hive.onlineBots || 0;
+    if (totalEl)  totalEl.textContent  = hive.totalBots  || 0;
+    if (dangerCEl) dangerCEl.textContent = hive.dangerZoneCount || 0;
+    if (enemyCEl)  enemyCEl.textContent  = (hive.knownEnemies || []).length;
+    renderRoster(hive.bots || []);
+    renderPool(hive.pool || {});
+    renderEnemies(hive.knownEnemies || []);
+    if (hive.intelFeed && hive.intelFeed.length) {
+      renderIntel(hive.intelFeed, false);
+    }
+  }
+
+  // ── Socket listeners ─────────────────────────────────────────────────────────
+  socket.on('hive:update', function (hive) {
+    applyStatus(hive);
+  });
+
+  socket.on('hive:intel', function (entry) {
+    renderIntel([entry], true);
+  });
+
+  socket.on('hive:pool', function (pool) {
+    renderPool(pool);
+  });
+
+  socket.on('hive:enemySpotted', function (data) {
+    if (enemyCEl) enemyCEl.textContent = String(Number(enemyCEl.textContent || 0) + 1);
+  });
+
+  socket.on('hive:dangerZone', function (data) {
+    if (dangerCEl) dangerCEl.textContent = String(Number(dangerCEl.textContent || 0) + 1);
+  });
+
+  // ── Broadcast alert button ───────────────────────────────────────────────────
+  var broadcastBtn   = document.getElementById('hiveBroadcastBtn');
+  var broadcastInput = document.getElementById('hiveBroadcastInput');
+  if (broadcastBtn && broadcastInput) {
+    broadcastBtn.addEventListener('click', async function () {
+      var msg = (broadcastInput.value || '').trim();
+      if (!msg) return;
+      broadcastBtn.disabled = true;
+      broadcastBtn.textContent = 'Sending…';
+      try {
+        await fetch('/bot-api/hive/broadcast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: 'alert', payload: { message: msg } })
+        });
+        broadcastInput.value = '';
+      } catch (_) {}
+      broadcastBtn.disabled = false;
+      broadcastBtn.textContent = 'Broadcast Alert';
+    });
+    broadcastInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') broadcastBtn.click();
+    });
+  }
+
+  // ── Flag danger zone button ──────────────────────────────────────────────────
+  var flagBtn    = document.getElementById('hiveFlagDangerBtn');
+  var dangerXEl  = document.getElementById('hiveDangerX');
+  var dangerYEl  = document.getElementById('hiveDangerY');
+  var dangerZEl  = document.getElementById('hiveDangerZ');
+  var dangerREl  = document.getElementById('hiveDangerReason');
+  if (flagBtn) {
+    flagBtn.addEventListener('click', async function () {
+      var x = parseFloat(dangerXEl.value), y = parseFloat(dangerYEl.value), z = parseFloat(dangerZEl.value);
+      if (isNaN(x) || isNaN(y) || isNaN(z)) { alert('Enter valid X, Y, Z coordinates.'); return; }
+      flagBtn.disabled = true;
+      flagBtn.textContent = 'Flagging…';
+      try {
+        await fetch('/bot-api/hive/danger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ x, y, z, reason: (dangerREl.value || '').trim() || 'manual' })
+        });
+        dangerXEl.value = ''; dangerYEl.value = ''; dangerZEl.value = ''; dangerREl.value = '';
+      } catch (_) {}
+      flagBtn.disabled = false;
+      flagBtn.textContent = 'Flag Danger Zone';
+    });
+  }
+
+  // ── Initial load ─────────────────────────────────────────────────────────────
+  async function loadHive() {
+    try {
+      var r = await fetch('/bot-api/hive/status', { cache: 'no-store' });
+      if (r.ok) {
+        var body = await r.json();
+        if (body && body.hive) applyStatus(body.hive);
+      }
+    } catch (_) {}
+  }
+
+  loadHive();
+  setInterval(function () { if (!document.hidden) loadHive(); }, 10000);
+})();
+
 // ── Schematic Lab ─────────────────────────────────────────────────────────────
 (function () {
   'use strict';

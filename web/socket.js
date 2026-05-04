@@ -201,6 +201,17 @@ function attachSocket(io, botManager) {
     io.emit('log',        entry);
     io.emit('fleet:log',  entry);
   });
+
+  // ── Hive Mind event bridge ─────────────────────────────────────────────────
+  const hiveMind = require('../core/hiveMind');
+  hiveMind.on('hive:intel',  (entry)  => io.emit('hive:intel',  entry));
+  hiveMind.on('hive:update', (status) => io.emit('hive:update', status));
+  hiveMind.on('hive:poolUpdated', () => {
+    io.emit('hive:pool', hiveMind.getAggregatedPool());
+  });
+  hiveMind.on('hive:dangerZone',   (data) => io.emit('hive:dangerZone',   data));
+  hiveMind.on('hive:enemySpotted', (data) => io.emit('hive:enemySpotted', data));
+  hiveMind.on('hive:taskAssigned', (data) => io.emit('hive:taskAssigned', data));
 }
 
 function normalizeConnectionOptions(options) {

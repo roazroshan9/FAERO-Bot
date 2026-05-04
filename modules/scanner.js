@@ -122,11 +122,24 @@ class AreaScanner {
         });
 
         if (found) {
+          const isNew = !this._map.has(blockName);
           this._map.set(blockName, {
             x: found.position.x,
             y: found.position.y,
             z: found.position.z
           });
+          // ── Hive Mind: share new resource discoveries with the fleet ────────
+          if (isNew) {
+            try {
+              const hiveMind = require('../core/hiveMind');
+              hiveMind.reportResource('scanner', {
+                type: blockName,
+                x: found.position.x,
+                y: found.position.y,
+                z: found.position.z
+              });
+            } catch (_) {}
+          }
         } else {
           // Remove stale entry — block is no longer in range
           this._map.delete(blockName);

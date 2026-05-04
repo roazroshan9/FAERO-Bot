@@ -1,5 +1,10 @@
 'use strict';
 
+const path = require('path');
+const fs   = require('fs');
+
+const PERSIST_PATH = path.join(__dirname, '..', 'data', 'hive_memory.json');
+
 /**
  * FAERO — Hive Mind (core/hiveMind.js)
  *
@@ -69,7 +74,12 @@ class HiveMind extends EventEmitter {
     // ── Intel Feed (rolling) ───────────────────────────────────────────────────
     this._intelFeed = [];
 
-    this._cleanupTimer = setInterval(() => this._cleanup(), 60 * 1000);
+    this._cleanupTimer      = setInterval(() => this._cleanup(),           60 * 1000);
+    this._persistTimer      = setInterval(() => this._persistMemory(),      90 * 1000);
+    this._healthMonitorTimer = setInterval(() => this._checkFleetHealth(), 15 * 1000);
+
+    // Load persisted memory from previous session
+    this._loadMemory();
   }
 
   // ── Bot Registration ─────────────────────────────────────────────────────────
@@ -348,8 +358,79 @@ class HiveMind extends EventEmitter {
         this._pool.delete(id);
   }
 
+  // ── Fleet Health Monitor ─────────────────────────────────────────────────────
+
+  /**
+   * Runs every 15 s. If the fleet's average HP drops below 35%, broadcasts a
+   * hive:retreatSignal so every bot can act on it (e.g. stop combat, go home).
+   */
+  _checkFleetHealth() {
+    const hpValues = [];
+    for (const entry of this._bots.values()) {
+      if (entry.bot && entry.bot.entity && entry.bot.health != null) {
+        hpValues.push(entry.bot.health);
+      }
+    }
+    if (hpValues.length < 2) return;
+    const avg = hpValues.reduce((a, b) => a + b, 0) / hpValues.length;
+    const pct = Math.round((avg / 20) * 100);
+    if (pct < 35) {
+      this._addIntel('system', '⚠ Fleet health critical: ' + pct + '% avg HP (' + Math.round(avg) + '/20) — retreat signal sent');
+      this.broadcast('retreat', { reason: 'fleet_health_critical', avgHp: Math.round(avg), pct });
+      this.emit('hive:retreatSignal', { avgHp: Math.round(avg), pct });
+    }
+  }
+
+  // ── Danger Zone Persistence ──────────────────────────────────────────────────
+
+  /**
+   * Serialize danger zones to disk so they survive bot restarts.
+   * Called every 90 s and on destroy().
+   */
+  _persistMemory() {
+    try {
+      const dir = path.dirname(PERSIST_PATH);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const data = {
+        version:     1,
+        savedAt:     new Date().toISOString(),
+        dangerZones: Array.from(this._dangerZones.entries())
+      };
+      fs.writeFileSync(PERSIST_PATH, JSON.stringify(data, null, 2));
+    } catch (_) {}
+  }
+
+  /**
+   * Load persisted memory on startup.
+   * Called once from constructor.
+   */
+  _loadMemory() {
+    try {
+      if (!fs.existsSync(PERSIST_PATH)) return;
+      const raw  = fs.readFileSync(PERSIST_PATH, 'utf8');
+      const data = JSON.parse(raw);
+      if (data.dangerZones && Array.isArray(data.dangerZones)) {
+        const now = Date.now();
+        let loaded = 0;
+        data.dangerZones.forEach(([key, zone]) => {
+          // Only restore zones that haven't expired yet
+          if (zone.at && (now - zone.at) < DANGER_ZONE_TTL) {
+            this._dangerZones.set(key, zone);
+            loaded++;
+          }
+        });
+        if (loaded > 0) {
+          this._addIntel('system', 'Restored ' + loaded + ' danger zone(s) from previous session');
+        }
+      }
+    } catch (_) {}
+  }
+
   destroy() {
-    if (this._cleanupTimer) clearInterval(this._cleanupTimer);
+    this._persistMemory();
+    if (this._cleanupTimer)       clearInterval(this._cleanupTimer);
+    if (this._persistTimer)       clearInterval(this._persistTimer);
+    if (this._healthMonitorTimer) clearInterval(this._healthMonitorTimer);
     this.removeAllListeners();
   }
 }

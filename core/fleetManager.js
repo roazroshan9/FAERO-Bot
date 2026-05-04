@@ -110,6 +110,30 @@ class FleetBot extends EventEmitter {
       movements.canDig = false;
       movements.allowSprinting = true;
       bot.pathfinder.setMovements(movements);
+
+      // ── Hive Mind: sync inventory on every slot change ────────────────────
+      if (bot.inventory) {
+        bot.inventory.on('updateSlot', () => {
+          try {
+            const items = {};
+            bot.inventory.items().forEach((it) => {
+              items[it.name] = (items[it.name] || 0) + it.count;
+            });
+            hiveMind.updatePool(this.id, items);
+          } catch (_) {}
+        });
+      }
+
+      // ── Hive Mind: report death site as danger zone ───────────────────────
+      bot.on('death', () => {
+        if (bot.entity && bot.entity.position) {
+          const pos = bot.entity.position;
+          hiveMind.reportDangerZone(this.id, {
+            x: pos.x, y: pos.y, z: pos.z,
+            reason: 'minion_death'
+          });
+        }
+      });
     });
 
     bot.on('chat', (username, message) => {

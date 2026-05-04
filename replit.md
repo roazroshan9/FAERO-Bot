@@ -118,6 +118,39 @@ Relative (`dx/dy/dz`) offsets from the bot's current position; or absolute (`x/y
 - Uses `antiDetection.jitter` (180–520 ms) between successful placements
 - Module-level `_session` singleton — only one build runs at a time; new build cancels previous
 
+## Max Pro Monster Roadmap
+
+Five god-tier modules being built in sequence to elevate FAERO to elite-tier collective intelligence:
+
+| # | Module | Status |
+|---|--------|--------|
+| 1 | **Hive Mind** — shared state bus, collective memory, resource pool, danger zones, fleet health monitor | ✅ Complete |
+| 2 | **Autonomous Survival v2** — full survival loop for ALL bots (not just leader), food chain, night shelter | Planned |
+| 3 | **Tactical Combat Engine** — formations (Wedge/Pincer/Shield Wall), role assignment, focus fire, staggered swings | Planned |
+| 4 | **Neural Social Engine** — persistent conversation memory, human typing rhythms, admin rapport building | Planned |
+| 5 | **Adaptive World Oracle** — server map learning, player behavior profiling, predictive resource routing | Planned |
+
+## Hive Mind (Module 1) — `core/hiveMind.js`
+
+Singleton EventEmitter connecting all fleet bots into a single collective intelligence.
+
+**What it provides:**
+- **Shared Memory Bus** — enemies, danger zones, resources broadcast to all bots instantly
+- **Collective Resource Pool** — real-time aggregated inventory across entire fleet, top-40 items
+- **Task Delegation Engine** — `getBestBotFor()` scores bots by HP, idle status, proximity
+- **Fleet Health Monitor** — checks avg HP every 15 s; broadcasts `hive:retreatSignal` at <35%
+- **Danger Zone Persistence** — serializes zones to `data/hive_memory.json` every 90 s; restores on startup
+- **Intel Feed** — rolling 120-entry log of collective activity with types: system/enemy/danger/resource/task
+
+**Integration points:**
+- `core/botManager.js` — registers leader on spawn, reports enemies from danger watch, flags death sites, syncs inventory pool on every slot change
+- `core/fleetManager.js` — registers/unregisters each minion, syncs minion inventory on slot change, flags minion death sites
+- `modules/scanner.js` — pipes new ore/chest discoveries into `hiveMind.reportResource()` on first find
+- `web/socket.js` — bridges `hive:intel`, `hive:update`, `hive:pool`, `hive:dangerZone`, `hive:enemySpotted`, `hive:taskAssigned` to dashboard in real-time
+- `web/server.js` — REST: `GET /bot-api/hive/status`, `/intel`, `/pool`, `/enemies`, `/dangers`; `POST /bot-api/hive/danger`, `/task`, `/broadcast`
+
+**Dashboard panel** — Live Hive Mind panel with fleet roster (role/HP/position/task badges), collective pool chips, known threats list, live intel feed, broadcast alert input, and manual danger zone flag form.
+
 ## Recent Updates
 
 - Fixed `ai/decisionEngine.js` so `think`, `decide`, and `act` are separate functions exported as `module.exports = { act, think, decide }`.

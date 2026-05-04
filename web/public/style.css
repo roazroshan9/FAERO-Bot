@@ -2320,6 +2320,361 @@ pre {
   align-self: center;
 }
 
+/* ── Hive Mind Panel ────────────────────────────────────────────────────────── */
+
+.hive-panel {
+  gap: 0.85rem;
+}
+
+.hive-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.1rem;
+}
+
+.hive-status-badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.hive-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(57,255,20,0.10);
+  border: 1px solid rgba(57,255,20,0.35);
+  color: #39FF14;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.hive-badge.danger {
+  background: rgba(255,49,95,0.10);
+  border-color: rgba(255,49,95,0.35);
+  color: #ff315f;
+}
+
+.hive-badge.warn {
+  background: rgba(255,170,0,0.10);
+  border-color: rgba(255,170,0,0.35);
+  color: #ffaa00;
+}
+
+.hive-badge-num {
+  font-size: 0.95em;
+  font-weight: 900;
+}
+
+.hive-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 0.85rem;
+}
+
+@media (max-width: 900px) {
+  .hive-grid { grid-template-columns: 1fr; }
+}
+
+.hive-section {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-height: 90px;
+}
+
+.hive-intel-section {
+  grid-column: span 2;
+}
+
+@media (max-width: 900px) {
+  .hive-intel-section { grid-column: span 1; }
+}
+
+.hive-section-label {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.hive-section-sub {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--cyan);
+  text-transform: none;
+  font-size: 0.95em;
+}
+
+.hive-empty {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-style: italic;
+  padding: 0.25rem 0;
+}
+
+/* Roster */
+.hive-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.hive-bot-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.15);
+}
+
+.hive-bot-role {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+}
+
+.hive-bot-role.leader {
+  background: rgba(255,215,0,0.15);
+  border: 1px solid rgba(255,215,0,0.4);
+  color: #ffd700;
+}
+
+.hive-bot-role.soldier {
+  background: rgba(0,255,255,0.08);
+  border: 1px solid rgba(0,255,255,0.25);
+  color: var(--cyan);
+}
+
+.hive-bot-name {
+  font-weight: 700;
+  color: var(--text);
+  flex: 1;
+}
+
+.hive-bot-task {
+  font-size: 0.7rem;
+  color: #39FF14;
+  background: rgba(57,255,20,0.08);
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hive-bot-offline {
+  opacity: 0.45;
+}
+
+.hive-bot-hp {
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Pool */
+.hive-pool-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-height: 130px;
+  overflow-y: auto;
+}
+
+.hive-pool-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: 0.72rem;
+  background: rgba(0,255,255,0.06);
+  border: 1px solid rgba(0,255,255,0.15);
+  border-radius: 5px;
+  padding: 0.18rem 0.55rem;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.hive-pool-count {
+  font-weight: 800;
+  color: var(--cyan);
+}
+
+/* Enemies */
+.hive-enemies-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.hive-enemy-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.76rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 5px;
+  background: rgba(255,49,95,0.06);
+  border: 1px solid rgba(255,49,95,0.15);
+}
+
+.hive-enemy-name {
+  font-weight: 700;
+  color: #ff315f;
+  flex: 1;
+}
+
+.hive-enemy-pos {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.hive-enemy-age {
+  font-size: 0.65rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Intel feed */
+.hive-intel-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.hive-intel-feed::-webkit-scrollbar { width: 4px; }
+.hive-intel-feed::-webkit-scrollbar-track { background: transparent; }
+.hive-intel-feed::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+.hive-intel-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  font-size: 0.73rem;
+  line-height: 1.4;
+  padding: 0.12rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.hive-intel-row:last-child { border-bottom: none; }
+
+.hive-intel-time {
+  font-size: 0.64rem;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.hive-intel-type {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.hive-intel-type.system  { background: rgba(255,255,255,0.07); color: #aaa; }
+.hive-intel-type.enemy   { background: rgba(255,49,95,0.15);   color: #ff315f; }
+.hive-intel-type.danger  { background: rgba(255,100,0,0.15);   color: #ff8c00; }
+.hive-intel-type.resource{ background: rgba(57,255,20,0.12);   color: #39FF14; }
+.hive-intel-type.task    { background: rgba(0,255,255,0.10);   color: var(--cyan); }
+
+.hive-intel-msg {
+  color: var(--text);
+  flex: 1;
+}
+
+.hive-intel-new {
+  animation: hiveIntelFlash 0.8s ease-out;
+}
+
+@keyframes hiveIntelFlash {
+  0%   { background: rgba(57,255,20,0.15); }
+  100% { background: transparent; }
+}
+
+/* Manual controls */
+.hive-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.hive-control-row {
+  flex-wrap: wrap;
+}
+
+.hive-btn {
+  padding: 0.42rem 1rem;
+  font-size: 0.78rem;
+  background: rgba(0,255,255,0.08);
+  border: 1px solid rgba(0,255,255,0.3);
+  color: var(--cyan);
+  border-radius: 7px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: background 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+
+.hive-btn:hover { background: rgba(0,255,255,0.16); border-color: rgba(0,255,255,0.55); }
+.hive-btn.danger { background: rgba(255,49,95,0.10); border-color: rgba(255,49,95,0.35); color: #ff315f; }
+.hive-btn.danger:hover { background: rgba(255,49,95,0.20); border-color: rgba(255,49,95,0.6); }
+
+.hive-input {
+  flex: 1;
+  min-width: 160px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 7px;
+  color: var(--text);
+  padding: 0.42rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.hive-coord-input {
+  width: 70px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 7px;
+  color: var(--text);
+  padding: 0.42rem 0.55rem;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
 /* ── Schematic Lab ──────────────────────────────────────────────────────────── */
 
 .schematic-lab-panel {
