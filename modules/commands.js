@@ -415,6 +415,16 @@ function parseIntent(text) {
   if (/^build\s+(status|progress)$/.test(text)) return { cmd: 'build_status' };
   if (/^build\s+(list|schematics?)$/.test(text)) return { cmd: 'build_list' };
 
+  // ── Fleet (group commands for all minion bots) ────────────────────────────
+  m = text.match(/^all\s+(follow|stop|come|join|leave)$/);
+  if (m) return { cmd: 'fleet_group', action: m[1] };
+
+  m = text.match(/^all\s+attack\s+(.+)$/);
+  if (m) return { cmd: 'fleet_group', action: 'attack', arg: m[1].trim() };
+
+  m = text.match(/^all\s+build\s+([a-z0-9_-]+)$/);
+  if (m) return { cmd: 'fleet_build', schematic: m[1] };
+
   // ── Give ──────────────────────────────────────────────────────────────────
   m = text.match(/^give\s+([a-z0-9_]+)(?:\s+(\d+))?$/);
   if (m) return { cmd: 'give', item: m[1], amount: m[2] ? Math.max(1, Math.min(Number(m[2]), 2304)) : 1 };
@@ -1308,6 +1318,33 @@ function handleCommand(ctx, username, message, tier) {
     case 'build_list': {
       say(bot, 'Built-in schematics: ' + autoBuild.listSchematics().join(', '));
       return true;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FLEET MANAGER — group commands for all minion bots
+    // ════════════════════════════════════════════════════════════════════════
+
+    case 'fleet_group': {
+      const fleetManager = require('../core/fleetManager');
+      const { action, arg } = intent;
+      if (!action) { say(bot, 'Fleet group command missing action.'); return false; }
+      fleetManager.groupCommand(action, arg || null);
+      const argSuffix = arg ? ' (target: ' + arg + ')' : '';
+      say(bot, 'Fleet command "' + action + '" dispatched to all minions' + argSuffix + '.');
+      return true;
+    }
+
+    case 'fleet_build': {
+      return commandTask('Fleet Distribute Build: ' + intent.schematic, async () => {
+        const fleetManager = require('../core/fleetManager');
+        say(bot, 'Distributing build "' + intent.schematic + '" across fleet…');
+        const result = await fleetManager.distributeBuild(intent.schematic);
+        say(bot,
+          'Fleet build "' + result.name + '" done — ' +
+          result.placed + ' placed, ' +
+          result.failed + ' failed across ' + result.bots + ' bot(s).'
+        );
+      });
     }
 
     // ════════════════════════════════════════════════════════════════════════

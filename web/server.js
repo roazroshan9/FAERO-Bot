@@ -551,6 +551,70 @@ function mountRoutes(app, io, botManager) {
       res.status(400).json({ ok: false, error: err.message });
     }
   });
+
+  // ── Fleet Manager API ──────────────────────────────────────────────────────
+  const fleetMgr = require('../core/fleetManager');
+  fleetMgr.init(botManager);
+
+  app.get('/bot-api/fleet/status', (req, res) => {
+    res.json({ ok: true, fleet: fleetMgr.getStatus() });
+  });
+
+  app.get('/bot-api/fleet/inventory', (req, res) => {
+    res.json({ ok: true, ...fleetMgr.getInventories() });
+  });
+
+  app.post('/bot-api/fleet/spawn', (req, res) => {
+    try {
+      const opts = req.body || {};
+      if (!opts.username) return res.status(400).json({ ok: false, error: '"username" is required' });
+      const leaderConn = botManager.lastConnectionOptions || {};
+      const id = fleetMgr.spawn({
+        username: opts.username,
+        host:     opts.host    || leaderConn.host    || process.env.MC_HOST    || 'localhost',
+        port:     opts.port    || leaderConn.port    || process.env.MC_PORT    || 25565,
+        auth:     opts.auth    || leaderConn.auth    || process.env.MC_AUTH    || 'offline',
+        version:  opts.version || leaderConn.version
+      });
+      res.json({ ok: true, id, username: opts.username });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/fleet/dismiss-all', (req, res) => {
+    fleetMgr.dismissAll();
+    res.json({ ok: true });
+  });
+
+  app.post('/bot-api/fleet/dismiss/:id', (req, res) => {
+    try {
+      fleetMgr.dismiss(req.params.id);
+      res.json({ ok: true, dismissed: req.params.id });
+    } catch (err) {
+      res.status(404).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/fleet/command', (req, res) => {
+    const { cmd, target } = req.body || {};
+    if (!cmd) return res.status(400).json({ ok: false, error: '"cmd" is required' });
+    try {
+      fleetMgr.groupCommand(String(cmd), target ? String(target) : null);
+      res.json({ ok: true, cmd, target: target || null });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/fleet/build', (req, res) => {
+    const input = req.body && (req.body.name || req.body.schematic);
+    if (!input) return res.status(400).json({ ok: false, error: 'Provide "name" (built-in schematic) or "schematic" (JSON object)' });
+    res.json({ ok: true, message: 'Distributed build started for "' + input + '" — check fleet:log events for progress' });
+    fleetMgr.distributeBuild(input).catch((err) => {
+      botManager.log('[fleet] Build error: ' + err.message);
+    });
+  });
 }
 
 function buildConfigSummary(botManager) {

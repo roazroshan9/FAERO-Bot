@@ -390,6 +390,54 @@ reason: waiting</pre>
           <div id="logs" class="logs"></div>
         </div>
 
+        <!-- ── Fleet Manager Panel ──────────────────────────────────────── -->
+        <div class="card wide glass-panel fleet-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">BOT ARMY</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <div class="fleet-header-row">
+            <h2>Fleet Manager</h2>
+            <span id="fleetCount" class="fleet-count">0 minions</span>
+          </div>
+          <p class="chat-help">Spawn lightweight minion bots that connect to the same server as the leader and follow your commands.</p>
+
+          <div class="control-row fleet-spawn-row">
+            <input id="fleetUsername" placeholder="Minion_1" class="fleet-username-input" autocomplete="off" maxlength="16">
+            <button id="fleetSpawnBtn" class="fleet-spawn-btn">Spawn Bot</button>
+            <button id="fleetDismissAllBtn" class="fleet-dismiss-all-btn danger">Dismiss All</button>
+          </div>
+
+          <div class="fleet-group-section">
+            <p class="fleet-group-label">GROUP COMMANDS</p>
+            <div class="control-row fleet-group-row">
+              <button class="fleet-cmd-btn" data-fleet-cmd="follow">Follow All</button>
+              <button class="fleet-cmd-btn" data-fleet-cmd="stop">Stop All</button>
+              <button class="fleet-cmd-btn" data-fleet-cmd="come">Come Here</button>
+              <button class="fleet-cmd-btn" data-fleet-cmd="join">Join All</button>
+              <button class="fleet-cmd-btn danger" data-fleet-cmd="leave">Leave All</button>
+            </div>
+            <div class="control-row">
+              <input id="fleetAttackInput" placeholder="Target name (player or mob)" class="fleet-attack-input" autocomplete="off">
+              <button id="fleetAttackBtn" class="fleet-cmd-btn danger">Attack All</button>
+            </div>
+            <div class="control-row">
+              <select id="fleetBuildSelect" class="fleet-build-select">
+                <option value="">— select schematic to distribute —</option>
+                <option value="platform_5x5">platform_5x5 (25 blocks)</option>
+                <option value="tower_3x3">tower_3x3 (45 blocks)</option>
+                <option value="house_small">house_small (~72 blocks)</option>
+                <option value="staircase_8">staircase_8 (36 blocks)</option>
+              </select>
+              <button id="fleetBuildBtn" class="fleet-build-btn">Distribute Build</button>
+            </div>
+          </div>
+
+          <div id="fleetBotList" class="fleet-bot-list">
+            <div class="fleet-empty">No minion bots spawned yet. Enter a username above to add one to the fleet.</div>
+          </div>
+        </div>
+
         <div id="rolePanel" class="card wide glass-panel role-panel" style="display:none">
           <div class="panel-title-row">
             <p class="eyebrow">ACCESS CONTROL</p>

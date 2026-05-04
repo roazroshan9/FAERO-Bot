@@ -1278,3 +1278,178 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
     elSil.textContent  = stats.warnings || 0;
   });
 })();
+
+// ── Fleet Manager Panel ───────────────────────────────────────────────────────
+(function () {
+  const fleetUsernameInput = document.getElementById('fleetUsername');
+  const fleetSpawnBtn      = document.getElementById('fleetSpawnBtn');
+  const fleetDismissAllBtn = document.getElementById('fleetDismissAllBtn');
+  const fleetAttackInput   = document.getElementById('fleetAttackInput');
+  const fleetAttackBtn     = document.getElementById('fleetAttackBtn');
+  const fleetBuildSelect   = document.getElementById('fleetBuildSelect');
+  const fleetBuildBtn      = document.getElementById('fleetBuildBtn');
+  const fleetBotList       = document.getElementById('fleetBotList');
+  const fleetCount         = document.getElementById('fleetCount');
+
+  if (!fleetBotList) return;
+
+  // ── Spawn ──────────────────────────────────────────────────────────────────
+  fleetSpawnBtn.addEventListener('click', () => {
+    const username = (fleetUsernameInput.value || '').trim();
+    if (!username) {
+      appendLog({ at: new Date().toISOString(), message: '[fleet] Enter a username to spawn a bot' });
+      return;
+    }
+    socket.emit('fleet:spawn', { username });
+    fleetUsernameInput.value = '';
+    fleetSpawnBtn.textContent = 'Spawning…';
+    setTimeout(() => { fleetSpawnBtn.textContent = 'Spawn Bot'; }, 2000);
+  });
+
+  fleetUsernameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') fleetSpawnBtn.click();
+  });
+
+  // ── Dismiss All ────────────────────────────────────────────────────────────
+  fleetDismissAllBtn.addEventListener('click', () => {
+    showConfirm('Dismiss all fleet minions?', () => {
+      fetch('/bot-api/fleet/dismiss-all', { method: 'POST' })
+        .then(() => loadFleetStatus())
+        .catch(() => {});
+    });
+  });
+
+  // ── Group command buttons ─────────────────────────────────────────────────
+  document.querySelectorAll('[data-fleet-cmd]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const cmd = btn.dataset.fleetCmd;
+      socket.emit('fleet:command', { cmd });
+      appendLog({ at: new Date().toISOString(), message: '[fleet] Group command: ' + cmd });
+    });
+  });
+
+  // ── Attack All ─────────────────────────────────────────────────────────────
+  fleetAttackBtn.addEventListener('click', () => {
+    const target = (fleetAttackInput.value || '').trim();
+    if (!target) {
+      appendLog({ at: new Date().toISOString(), message: '[fleet] Enter a target name first' });
+      return;
+    }
+    socket.emit('fleet:command', { cmd: 'attack', target });
+    appendLog({ at: new Date().toISOString(), message: '[fleet] Attack command sent: ' + target });
+  });
+
+  fleetAttackInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') fleetAttackBtn.click();
+  });
+
+  // ── Distribute Build ───────────────────────────────────────────────────────
+  fleetBuildBtn.addEventListener('click', async () => {
+    const schematic = fleetBuildSelect.value;
+    if (!schematic) {
+      appendLog({ at: new Date().toISOString(), message: '[fleet] Select a schematic first' });
+      return;
+    }
+    fleetBuildBtn.disabled = true;
+    fleetBuildBtn.textContent = 'Building…';
+    try {
+      const res = await fetch('/bot-api/fleet/build', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: schematic })
+      });
+      const data = await res.json();
+      appendLog({ at: new Date().toISOString(), message: '[fleet] ' + (data.message || (data.ok ? 'Build started' : (data.error || 'Error'))) });
+    } catch (err) {
+      appendLog({ at: new Date().toISOString(), message: '[fleet] Build request error: ' + err.message });
+    } finally {
+      fleetBuildBtn.disabled = false;
+      fleetBuildBtn.textContent = 'Distribute Build';
+    }
+  });
+
+  // ── Render fleet status ────────────────────────────────────────────────────
+  function renderFleet(data) {
+    if (!data) return;
+    const minions = Array.isArray(data.minions) ? data.minions : [];
+    if (fleetCount) {
+      fleetCount.textContent = minions.length + ' minion' + (minions.length === 1 ? '' : 's');
+    }
+
+    if (!minions.length) {
+      fleetBotList.innerHTML = '<div class="fleet-empty">No minion bots spawned yet. Enter a username above to add one to the fleet.</div>';
+      return;
+    }
+
+    fleetBotList.innerHTML = minions.map((m) => {
+      const stateClass = {
+        online:     'fleet-state-online',
+        following:  'fleet-state-following',
+        connecting: 'fleet-state-connecting',
+        offline:    'fleet-state-offline',
+        error:      'fleet-state-error',
+        busy:       'fleet-state-busy'
+      }[m.state] || 'fleet-state-offline';
+
+      const hp    = m.health != null ? Math.round(m.health) : null;
+      const hpPct = hp != null ? Math.min(100, (hp / 20) * 100) : 0;
+      const hpBar = hp != null
+        ? '<div class="fleet-hp-bar"><div class="fleet-hp-fill" style="width:' + hpPct + '%;background:' +
+          (hp > 10 ? '#39FF14' : hp > 5 ? '#ffaa00' : '#ff315f') + '"></div></div>'
+        : '';
+
+      const pos = m.position
+        ? 'X' + m.position.x + ' Y' + m.position.y + ' Z' + m.position.z
+        : '—';
+
+      const followBadge = m.following
+        ? '<span class="fleet-following-badge">FOLLOWING</span>'
+        : '';
+
+      return '<div class="fleet-bot-row">' +
+        '<div class="fleet-bot-info">' +
+          '<span class="fleet-bot-name">' + escapeHtml(m.username) + '</span>' +
+          '<span class="fleet-state-badge ' + stateClass + '">' + m.state + '</span>' +
+          followBadge +
+          '<span class="fleet-bot-pos">' + pos + '</span>' +
+        '</div>' +
+        hpBar +
+        '<div class="fleet-bot-meta">' +
+          (hp != null ? '<span>' + hp + ' HP</span>' : '') +
+          '<span>' + (m.invCount || 0) + ' items</span>' +
+        '</div>' +
+        '<button class="fleet-dismiss-single danger" data-fleet-id="' + escapeHtml(m.id) + '">Dismiss</button>' +
+      '</div>';
+    }).join('');
+
+    fleetBotList.querySelectorAll('.fleet-dismiss-single').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.fleetId;
+        showConfirm('Dismiss fleet bot "' + id + '"?', () => {
+          fetch('/bot-api/fleet/dismiss/' + encodeURIComponent(id), { method: 'POST' })
+            .then(() => loadFleetStatus())
+            .catch(() => {});
+        });
+      });
+    });
+  }
+
+  // ── Socket listener ────────────────────────────────────────────────────────
+  socket.on('fleet:update', (data) => {
+    if (data) renderFleet(data);
+  });
+
+  // ── Initial load + polling fallback ───────────────────────────────────────
+  async function loadFleetStatus() {
+    try {
+      const r = await fetch('/bot-api/fleet/status', { cache: 'no-store' });
+      if (r.ok) {
+        const body = await r.json();
+        if (body && body.fleet) renderFleet(body.fleet);
+      }
+    } catch (_) {}
+  }
+
+  loadFleetStatus();
+  setInterval(() => { if (!document.hidden) loadFleetStatus(); }, 8000);
+})();

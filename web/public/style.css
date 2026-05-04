@@ -2086,3 +2086,236 @@ pre {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* ── Fleet Manager Panel ─────────────────────────────────────────────────── */
+
+.fleet-panel {
+  border-top: 2px solid rgba(0, 255, 255, 0.18);
+}
+
+.fleet-header-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+
+.fleet-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+}
+
+.fleet-spawn-row {
+  margin-bottom: 4px;
+}
+
+.fleet-username-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.fleet-spawn-btn {
+  background: rgba(57, 255, 20, 0.10);
+  border-color: rgba(57, 255, 20, 0.35);
+  color: var(--green);
+  white-space: nowrap;
+}
+.fleet-spawn-btn:hover {
+  background: rgba(57, 255, 20, 0.20);
+  box-shadow: var(--glow-green);
+}
+
+.fleet-dismiss-all-btn {
+  white-space: nowrap;
+}
+
+.fleet-group-section {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 14px;
+  margin-bottom: 16px;
+}
+
+.fleet-group-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin: 0 0 10px;
+}
+
+.fleet-group-row {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fleet-cmd-btn {
+  font-size: 12px;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+
+.fleet-attack-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.fleet-build-select {
+  flex: 1;
+  min-width: 0;
+  background: rgba(4, 18, 20, 0.72);
+  border: 1px solid var(--line);
+  color: #d8fff8;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.fleet-build-select:focus {
+  outline: none;
+  border-color: rgba(0, 255, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(0, 255, 255, 0.08);
+}
+.fleet-build-select option {
+  background: #071112;
+}
+
+.fleet-build-btn {
+  background: rgba(0, 255, 255, 0.10);
+  border-color: rgba(0, 255, 255, 0.35);
+  color: var(--cyan);
+  white-space: nowrap;
+}
+.fleet-build-btn:hover {
+  background: rgba(0, 255, 255, 0.18);
+  box-shadow: var(--glow-cyan);
+}
+.fleet-build-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* Bot list */
+
+.fleet-bot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 60px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.fleet-empty {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  text-align: center;
+  padding: 24px 12px;
+}
+
+.fleet-bot-row {
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 10px;
+  align-items: center;
+  transition: border-color 0.2s;
+}
+.fleet-bot-row:hover {
+  border-color: rgba(0, 255, 255, 0.28);
+}
+
+.fleet-bot-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.fleet-bot-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: #d8fff8;
+  letter-spacing: 0.02em;
+}
+
+.fleet-state-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  flex-shrink: 0;
+}
+
+.fleet-state-online     { background: rgba(57,255,20,0.10); color: var(--green); border-color: rgba(57,255,20,0.25); }
+.fleet-state-following  { background: rgba(0,255,255,0.10); color: var(--cyan);  border-color: rgba(0,255,255,0.28); }
+.fleet-state-connecting { background: rgba(255,170,0,0.10); color: #ffaa00;      border-color: rgba(255,170,0,0.28); }
+.fleet-state-offline    { background: rgba(120,120,120,0.08); color: #556a6a;    border-color: rgba(120,120,120,0.18); }
+.fleet-state-error      { background: rgba(255,49,95,0.10); color: var(--red);   border-color: rgba(255,49,95,0.28); }
+.fleet-state-busy       { background: rgba(153,68,255,0.10); color: #cc88ff;     border-color: rgba(153,68,255,0.28); }
+
+.fleet-following-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--cyan);
+  text-transform: uppercase;
+  animation: breatheCyan 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.fleet-bot-pos {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fleet-hp-bar {
+  width: 64px;
+  height: 5px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  align-self: center;
+  flex-shrink: 0;
+}
+.fleet-hp-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease, background 0.5s ease;
+}
+
+.fleet-bot-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 10px;
+  color: var(--muted);
+  gap: 2px;
+  min-width: 48px;
+  flex-shrink: 0;
+}
+
+.fleet-dismiss-single {
+  font-size: 11px;
+  padding: 5px 10px;
+  flex-shrink: 0;
+  align-self: center;
+}

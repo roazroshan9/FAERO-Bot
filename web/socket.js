@@ -131,6 +131,50 @@ function attachSocket(io, botManager) {
         socket.emit('errorMessage', err.message);
       }
     });
+
+    // ── Fleet socket handlers ─────────────────────────────────────────────────
+    const fleetManager = require('../core/fleetManager');
+
+    socket.on('fleet:spawn', (opts) => {
+      try {
+        const leaderConn = botManager.lastConnectionOptions || {};
+        const id = fleetManager.spawn({
+          username: (opts && opts.username) || '',
+          host:     (opts && opts.host)    || leaderConn.host    || 'localhost',
+          port:     (opts && opts.port)    || leaderConn.port    || 25565,
+          auth:     (opts && opts.auth)    || leaderConn.auth    || 'offline',
+          version:  (opts && opts.version) || leaderConn.version
+        });
+        socket.emit('log', { at: new Date().toISOString(), message: '[fleet] Spawned ' + id });
+        io.emit('fleet:update', fleetManager.getStatus());
+      } catch (err) {
+        socket.emit('errorMessage', '[fleet] Spawn failed: ' + err.message);
+      }
+    });
+
+    socket.on('fleet:dismiss', (idOrUsername) => {
+      try {
+        fleetManager.dismiss(String(idOrUsername || ''));
+        io.emit('fleet:update', fleetManager.getStatus());
+      } catch (err) {
+        socket.emit('errorMessage', '[fleet] Dismiss failed: ' + err.message);
+      }
+    });
+
+    socket.on('fleet:command', (payload) => {
+      try {
+        const { cmd, target } = payload || {};
+        if (!cmd) throw new Error('"cmd" is required');
+        fleetManager.groupCommand(String(cmd), target ? String(target) : null);
+        io.emit('fleet:update', fleetManager.getStatus());
+      } catch (err) {
+        socket.emit('errorMessage', '[fleet] Command failed: ' + err.message);
+      }
+    });
+
+    socket.on('fleet:status', () => {
+      socket.emit('fleet:update', fleetManager.getStatus());
+    });
   });
 
   botManager.on('ai_goal_update', (data)  => io.emit('ai_goal_update',  data));
@@ -149,6 +193,14 @@ function attachSocket(io, botManager) {
   botManager.on('botError', (err) => io.emit('errorMessage', err && err.message ? err.message : String(err)));
   botManager.on('thought', (payload) => io.emit('thought', buildThoughtPayload(botManager, payload)));
   botManager.on('keepalive', (stats) => io.emit('keepalive', stats));
+
+  // ── Fleet event bridge ────────────────────────────────────────────────────
+  const fleetManagerBridge = require('../core/fleetManager');
+  fleetManagerBridge.on('fleet:update', (data)  => io.emit('fleet:update', data));
+  fleetManagerBridge.on('fleet:log',    (entry) => {
+    io.emit('log',        entry);
+    io.emit('fleet:log',  entry);
+  });
 }
 
 function normalizeConnectionOptions(options) {
