@@ -438,6 +438,38 @@ reason: waiting</pre>
           </div>
         </div>
 
+        <!-- ── Schematic Lab Panel ────────────────────────────────────── -->
+        <div class="card wide glass-panel schematic-lab-panel">
+          <div class="panel-title-row">
+            <p class="eyebrow">BUILDER'S LAB</p>
+            <span class="pulse-dot cyan"></span>
+          </div>
+          <div class="schematic-lab-header">
+            <h2>Schematic Lab</h2>
+            <span id="schematicLabCount" class="schematic-lab-count">0 saved</span>
+          </div>
+          <p class="chat-help">Paste custom schematic JSON, preview block requirements, then deploy across the fleet.</p>
+
+          <div class="schematic-input-section">
+            <div class="control-row">
+              <input id="schematicNameInput" placeholder="Schematic name (e.g. my_wall)" class="schematic-name-input" autocomplete="off" maxlength="48">
+            </div>
+            <textarea id="schematicJsonInput" class="schematic-json-input" placeholder='Paste JSON schematic here…&#10;&#10;Format: { "name": "my_build", "relative": true, "blocks": [ { "dx": 0, "dy": 0, "dz": 0, "type": "oak_planks" }, … ] }'></textarea>
+            <div class="control-row schematic-action-row">
+              <button id="schematicPreviewBtn" class="schematic-action-btn preview">Preview</button>
+              <button id="schematicSaveBtn" class="schematic-action-btn save">Save to Lab</button>
+            </div>
+          </div>
+
+          <div id="schematicPreviewPanel" class="schematic-preview-panel" style="display:none">
+            <div id="schematicPreviewInfo"></div>
+          </div>
+
+          <div id="schematicLabList" class="schematic-lab-list">
+            <div class="schematic-lab-empty">No schematics saved yet. Paste JSON above and click Save to Lab.</div>
+          </div>
+        </div>
+
         <div id="rolePanel" class="card wide glass-panel role-panel" style="display:none">
           <div class="panel-title-row">
             <p class="eyebrow">ACCESS CONTROL</p>

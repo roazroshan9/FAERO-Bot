@@ -126,6 +126,7 @@ class FleetBot extends EventEmitter {
 
     bot.on('kicked', (reason) => {
       this.log('Kicked: ' + String(reason).slice(0, 120));
+      this.emit('kicked', { id: this.id, username: this.username, reason: String(reason).slice(0, 200) });
     });
 
     bot.on('end', () => {
@@ -278,6 +279,7 @@ class FleetManager extends EventEmitter {
       this.emit('fleet:log', e);
     });
     minion.on('statusChange', () => this._broadcastNow());
+    minion.on('kicked',       (data) => this.emit('fleet:botKicked', data));
 
     this._minions.push(minion);
     minion.connect().catch((err) => minion.log('Connect error: ' + err.message));
@@ -417,6 +419,7 @@ class FleetManager extends EventEmitter {
     const chunkSize = Math.ceil(blocks.length / n);
 
     this.log('[fleet] Distributing "' + name + '" (' + blocks.length + ' blocks) across ' + n + ' bot(s)');
+    this.emit('fleet:buildStart', { name, totalBlocks: blocks.length, bots: n });
 
     const promises = participants.map(({ bot: b, label }, i) => {
       const chunk = blocks.slice(i * chunkSize, (i + 1) * chunkSize);
@@ -433,6 +436,7 @@ class FleetManager extends EventEmitter {
     }, { placed: 0, failed: 0 });
 
     this.log('[fleet] "' + name + '" complete — ' + totals.placed + ' placed, ' + totals.failed + ' failed');
+    this.emit('fleet:buildComplete', { name, placed: totals.placed, failed: totals.failed, bots: n });
     return { placed: totals.placed, failed: totals.failed, bots: n, name };
   }
 

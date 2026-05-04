@@ -17,6 +17,7 @@
 
 const { Client, GatewayIntentBits, Events, EmbedBuilder } = require('discord.js');
 const roles = require('../config/roles');
+const { mountFleetExtension, handleFleetCommand } = require('../modules/discordFleet');
 
 const PREFIX = '!bot';
 
@@ -43,6 +44,8 @@ class DiscordBridge {
     this._livePanels = new Map();
     this.LIVE_INTERVAL_MS = 5000;     // refresh cadence
     this.LIVE_LEASE_MS    = 30 * 60 * 1000; // auto-stop after 30 min idle
+
+    this._fleetExtensionMounted = false;
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -74,11 +77,13 @@ class DiscordBridge {
     this.client.once(Events.ClientReady, (c) => {
       console.log('[discord] Logged in as ' + c.user.tag);
       this.botManager.log('[discord] Bridge online as ' + c.user.tag);
+      if (!this._fleetExtensionMounted) mountFleetExtension(this);
     });
 
     this.client.on(Events.MessageCreate, (message) => {
       if (message.author.bot) return;
-      if (!message.content.startsWith(PREFIX)) return;
+      const isFleet = message.content.startsWith('!fleet');
+      if (!message.content.startsWith(PREFIX) && !isFleet) return;
       if (this.guildId && message.guildId !== this.guildId) return;
 
       const userId = message.author.id;
@@ -105,7 +110,12 @@ class DiscordBridge {
 
       this._userCooldowns.set(userId, now);
       this._globalBucket.push(now);
-      this._handleMessage(message);
+
+      if (isFleet) {
+        handleFleetCommand(this, message).catch(() => {});
+      } else {
+        this._handleMessage(message);
+      }
     });
 
     this._logListener = (entry) => this._forwardLog(entry);

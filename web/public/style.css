@@ -2319,3 +2319,299 @@ pre {
   flex-shrink: 0;
   align-self: center;
 }
+
+/* ── Schematic Lab ──────────────────────────────────────────────────────────── */
+
+.schematic-lab-panel {
+  gap: 0;
+}
+
+.schematic-lab-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.schematic-lab-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--cyan);
+  background: rgba(0,255,255,0.08);
+  border: 1px solid rgba(0,255,255,0.25);
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+}
+
+.schematic-input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0.75rem 0 0.6rem;
+}
+
+.schematic-name-input {
+  flex: 1;
+  background: rgba(0,255,255,0.06);
+  border: 1px solid rgba(0,255,255,0.2);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  padding: 0.45rem 0.7rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.schematic-name-input:focus {
+  border-color: var(--cyan);
+}
+
+.schematic-json-input {
+  width: 100%;
+  min-height: 140px;
+  max-height: 280px;
+  resize: vertical;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(0,255,255,0.18);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.79rem;
+  line-height: 1.5;
+  padding: 0.6rem 0.75rem;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.schematic-json-input:focus {
+  border-color: var(--cyan);
+}
+
+.schematic-action-row {
+  gap: 0.5rem;
+}
+
+.schematic-action-btn {
+  flex: 1;
+  padding: 0.45rem 0;
+  border-radius: 7px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.18s, opacity 0.15s;
+}
+
+.schematic-action-btn.preview {
+  background: rgba(0,255,255,0.12);
+  color: var(--cyan);
+  border-color: rgba(0,255,255,0.3);
+}
+
+.schematic-action-btn.preview:hover:not(:disabled) {
+  background: rgba(0,255,255,0.22);
+}
+
+.schematic-action-btn.save {
+  background: rgba(57,255,20,0.12);
+  color: #39FF14;
+  border-color: rgba(57,255,20,0.3);
+}
+
+.schematic-action-btn.save:hover:not(:disabled) {
+  background: rgba(57,255,20,0.22);
+}
+
+.schematic-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Preview panel */
+.schematic-preview-panel {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(0,255,255,0.18);
+  border-radius: 8px;
+  padding: 0.8rem 0.9rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.82rem;
+}
+
+.sp-error {
+  color: #FF315F;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.sp-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.2rem;
+  margin-bottom: 0.7rem;
+}
+
+.sp-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.sp-stat-lbl {
+  font-size: 0.67rem;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.sp-stat-val {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--cyan);
+}
+
+.sp-table-label {
+  font-size: 0.67rem;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.sp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.sp-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.67rem;
+  letter-spacing: 0.07em;
+  padding: 0.15rem 0.4rem 0.35rem;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.sp-table td {
+  padding: 0.2rem 0.4rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.sp-type {
+  color: var(--text);
+}
+
+.sp-count {
+  color: var(--cyan);
+  text-align: right;
+  padding-right: 0.2rem;
+}
+
+/* Saved schematics list */
+.schematic-lab-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
+.schematic-lab-empty {
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+  padding: 1.1rem 0 0.5rem;
+}
+
+.schematic-lab-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: rgba(0,255,255,0.04);
+  border: 1px solid rgba(0,255,255,0.12);
+  border-radius: 8px;
+  padding: 0.55rem 0.8rem;
+  transition: border-color 0.2s;
+}
+
+.schematic-lab-item:hover {
+  border-color: rgba(0,255,255,0.28);
+}
+
+.sl-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.sl-name {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sl-meta {
+  font-size: 0.74rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sl-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.sl-deploy-btn {
+  background: rgba(0,255,255,0.12);
+  color: var(--cyan);
+  border: 1px solid rgba(0,255,255,0.3);
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s;
+  white-space: nowrap;
+}
+
+.sl-deploy-btn:hover:not(:disabled) {
+  background: rgba(0,255,255,0.24);
+}
+
+.sl-deploy-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sl-delete-btn {
+  background: rgba(255,49,95,0.1);
+  color: #FF315F;
+  border: 1px solid rgba(255,49,95,0.28);
+  border-radius: 6px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s;
+  white-space: nowrap;
+}
+
+.sl-delete-btn:hover:not(:disabled) {
+  background: rgba(255,49,95,0.22);
+}

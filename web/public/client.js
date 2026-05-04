@@ -1453,3 +1453,174 @@ document.getElementById('confirmModal').addEventListener('click', (e) => {
   loadFleetStatus();
   setInterval(() => { if (!document.hidden) loadFleetStatus(); }, 8000);
 })();
+
+// ── Schematic Lab ─────────────────────────────────────────────────────────────
+(function () {
+  'use strict';
+
+  const nameInput    = document.getElementById('schematicNameInput');
+  const jsonInput    = document.getElementById('schematicJsonInput');
+  const previewBtn   = document.getElementById('schematicPreviewBtn');
+  const saveBtn      = document.getElementById('schematicSaveBtn');
+  const previewPanel = document.getElementById('schematicPreviewPanel');
+  const previewInfo  = document.getElementById('schematicPreviewInfo');
+  const labList      = document.getElementById('schematicLabList');
+  const labCount     = document.getElementById('schematicLabCount');
+
+  if (!labList) return;
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function showPreviewError(msg) {
+    previewPanel.style.display = '';
+    previewInfo.innerHTML = '<div class="sp-error">' + escHtml(msg) + '</div>';
+  }
+
+  function showPreview(data) {
+    previewPanel.style.display = '';
+    const topBlocks = Object.entries(data.blockCounts)
+      .sort(function (a, b) { return b[1] - a[1]; })
+      .slice(0, 15)
+      .map(function (e) {
+        return '<tr><td class="sp-type">' + escHtml(e[0]) + '</td><td class="sp-count">' + e[1] + '</td></tr>';
+      }).join('');
+    var d = data.dimensions;
+    previewInfo.innerHTML =
+      '<div class="sp-stats">' +
+        '<span class="sp-stat"><span class="sp-stat-lbl">Name</span><span class="sp-stat-val">' + escHtml(data.name) + '</span></span>' +
+        '<span class="sp-stat"><span class="sp-stat-lbl">Total Blocks</span><span class="sp-stat-val">' + data.totalBlocks + '</span></span>' +
+        '<span class="sp-stat"><span class="sp-stat-lbl">Unique Types</span><span class="sp-stat-val">' + data.uniqueTypes + '</span></span>' +
+        '<span class="sp-stat"><span class="sp-stat-lbl">Size (X×Y×Z)</span><span class="sp-stat-val">' + d.sizeX + '×' + d.sizeY + '×' + d.sizeZ + '</span></span>' +
+      '</div>' +
+      '<div class="sp-table-label">Block Requirements</div>' +
+      '<table class="sp-table"><thead><tr><th>Block Type</th><th>Count</th></tr></thead><tbody>' + topBlocks + '</tbody></table>';
+  }
+
+  previewBtn.addEventListener('click', async function () {
+    var raw = (jsonInput.value || '').trim();
+    if (!raw) { showPreviewError('Paste a JSON schematic first.'); return; }
+    previewBtn.disabled = true;
+    previewBtn.textContent = 'Validating…';
+    try {
+      var res = await fetch('/bot-api/schematics/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ json: raw, name: (nameInput.value || '').trim() })
+      });
+      var data = await res.json();
+      if (!data.ok) { showPreviewError(data.error || 'Invalid schematic'); return; }
+      showPreview(data);
+    } catch (err) {
+      showPreviewError('Request error: ' + err.message);
+    } finally {
+      previewBtn.disabled = false;
+      previewBtn.textContent = 'Preview';
+    }
+  });
+
+  saveBtn.addEventListener('click', async function () {
+    var raw  = (jsonInput.value || '').trim();
+    var name = (nameInput.value || '').trim();
+    if (!raw) { showPreviewError('Paste a JSON schematic first.'); return; }
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+    try {
+      var res = await fetch('/bot-api/schematics/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ json: raw, name: name })
+      });
+      var data = await res.json();
+      if (!data.ok) { showPreviewError(data.error || 'Save failed'); return; }
+      jsonInput.value = '';
+      nameInput.value = '';
+      previewPanel.style.display = 'none';
+      if (typeof appendLog === 'function') {
+        appendLog({ at: new Date().toISOString(), message: '[lab] Saved "' + data.name + '" (' + data.totalBlocks + ' blocks)' });
+      }
+      loadSchematics();
+    } catch (err) {
+      showPreviewError('Save error: ' + err.message);
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save to Lab';
+    }
+  });
+
+  async function loadSchematics() {
+    try {
+      var r = await fetch('/bot-api/schematics', { cache: 'no-store' });
+      if (!r.ok) return;
+      var data = await r.json();
+      renderSchematics(data.schematics || []);
+    } catch (_) {}
+  }
+
+  function renderSchematics(list) {
+    if (labCount) labCount.textContent = list.length + ' saved';
+    if (!list.length) {
+      labList.innerHTML = '<div class="schematic-lab-empty">No schematics saved yet. Paste JSON above and click Save to Lab.</div>';
+      return;
+    }
+    labList.innerHTML = list.map(function (s) {
+      var topTypes = Object.entries(s.blockCounts)
+        .sort(function (a, b) { return b[1] - a[1]; })
+        .slice(0, 3)
+        .map(function (e) { return e[1] + '×' + e[0]; })
+        .join(', ');
+      return '<div class="schematic-lab-item">' +
+        '<div class="sl-info">' +
+          '<span class="sl-name">' + escHtml(s.name) + '</span>' +
+          '<span class="sl-meta">' + s.totalBlocks + ' blocks  ·  ' + escHtml(topTypes) +
+            (s.dimensions ? '  ·  ' + s.dimensions.sizeX + '×' + s.dimensions.sizeY + '×' + s.dimensions.sizeZ : '') +
+          '</span>' +
+        '</div>' +
+        '<div class="sl-actions">' +
+          '<button class="sl-deploy-btn" data-sid="' + escHtml(s.id) + '">Deploy to Fleet</button>' +
+          '<button class="sl-delete-btn danger" data-sid="' + escHtml(s.id) + '">Delete</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    labList.querySelectorAll('.sl-deploy-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { deploySchematic(btn.dataset.sid, btn); });
+    });
+    labList.querySelectorAll('.sl-delete-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { deleteSchematic(btn.dataset.sid); });
+    });
+  }
+
+  async function deploySchematic(id, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Deploying…';
+    try {
+      var res = await fetch('/bot-api/schematics/' + encodeURIComponent(id) + '/deploy', { method: 'POST' });
+      var data = await res.json();
+      var msg = data.message || (data.ok ? 'Deploy started' : (data.error || 'Unknown error'));
+      if (typeof appendLog === 'function') {
+        appendLog({ at: new Date().toISOString(), message: '[lab] ' + msg });
+      }
+    } catch (err) {
+      if (typeof appendLog === 'function') {
+        appendLog({ at: new Date().toISOString(), message: '[lab] Deploy error: ' + err.message });
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Deploy to Fleet';
+    }
+  }
+
+  async function deleteSchematic(id) {
+    try {
+      await fetch('/bot-api/schematics/' + encodeURIComponent(id), { method: 'DELETE' });
+      loadSchematics();
+    } catch (_) {}
+  }
+
+  loadSchematics();
+  setInterval(function () { if (!document.hidden) loadSchematics(); }, 30000);
+})();

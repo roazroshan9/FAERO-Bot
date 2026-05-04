@@ -10,6 +10,46 @@ const attachSocket = require('./socket');
 let lastCpuUsage = process.cpuUsage();
 let lastCpuCheck = Date.now();
 
+// ── Schematic Session Store ───────────────────────────────────────────────────
+// In-memory store of custom schematics uploaded via the Schematic Lab panel.
+// Session-scoped (resets on process restart). Max 20 entries, 128 KB each.
+const _schematicStore   = new Map(); // id → entry object
+let _schematicNextId    = 1;
+const MAX_SCHEMATICS    = 20;
+const MAX_SCHEMA_BYTES  = 128 * 1024;
+
+function _validateSchematic(rawInput, nameOverride) {
+  const autoBuild = require('../modules/autoBuild');
+  let jsonData;
+  if (typeof rawInput === 'string') {
+    if (rawInput.length > MAX_SCHEMA_BYTES) {
+      throw new Error('Schematic JSON exceeds max size (' + Math.round(MAX_SCHEMA_BYTES / 1024) + ' KB)');
+    }
+    try { jsonData = JSON.parse(rawInput); } catch (e) { throw new Error('Invalid JSON: ' + e.message); }
+  } else if (rawInput && typeof rawInput === 'object') {
+    jsonData = rawInput;
+  } else {
+    throw new Error('Provide a "json" field containing the schematic data');
+  }
+
+  const { blocks, name } = autoBuild.parseSchematic(jsonData, { x: 0, y: 0, z: 0 });
+  const finalName = (nameOverride && String(nameOverride).trim()) || name;
+
+  const blockCounts = {};
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+  for (const b of blocks) {
+    blockCounts[b.type] = (blockCounts[b.type] || 0) + 1;
+    if (b.x < minX) minX = b.x; if (b.x > maxX) maxX = b.x;
+    if (b.y < minY) minY = b.y; if (b.y > maxY) maxY = b.y;
+    if (b.z < minZ) minZ = b.z; if (b.z > maxZ) maxZ = b.z;
+  }
+  const dimensions = { sizeX: maxX - minX + 1, sizeY: maxY - minY + 1, sizeZ: maxZ - minZ + 1 };
+
+  return { name: finalName, jsonData, totalBlocks: blocks.length, uniqueTypes: Object.keys(blockCounts).length, blockCounts, dimensions };
+}
+
 function createWebServer(options) {
   const botManager = options && options.botManager ? options.botManager : defaultBotManager;
   const app = express();
@@ -613,6 +653,62 @@ function mountRoutes(app, io, botManager) {
     res.json({ ok: true, message: 'Distributed build started for "' + input + '" — check fleet:log events for progress' });
     fleetMgr.distributeBuild(input).catch((err) => {
       botManager.log('[fleet] Build error: ' + err.message);
+    });
+  });
+
+  // ── Schematic Lab API ─────────────────────────────────────────────────────
+
+  app.post('/bot-api/schematics/validate', (req, res) => {
+    try {
+      const raw  = req.body && (req.body.json || req.body.schematic);
+      const name = (req.body && req.body.name) || '';
+      if (!raw) return res.status(400).json({ ok: false, error: 'Provide a "json" field with schematic data' });
+      const r = _validateSchematic(raw, name);
+      res.json({ ok: true, name: r.name, totalBlocks: r.totalBlocks, uniqueTypes: r.uniqueTypes, blockCounts: r.blockCounts, dimensions: r.dimensions });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.post('/bot-api/schematics/save', (req, res) => {
+    try {
+      const raw  = req.body && (req.body.json || req.body.schematic);
+      const name = (req.body && req.body.name) || '';
+      if (!raw) return res.status(400).json({ ok: false, error: 'Provide a "json" field with schematic data' });
+      if (_schematicStore.size >= MAX_SCHEMATICS) {
+        const oldestKey = _schematicStore.keys().next().value;
+        _schematicStore.delete(oldestKey);
+      }
+      const v  = _validateSchematic(raw, name);
+      const id = 'schema_' + (_schematicNextId++);
+      _schematicStore.set(id, { id, name: v.name, jsonData: v.jsonData, blockCounts: v.blockCounts, totalBlocks: v.totalBlocks, uniqueTypes: v.uniqueTypes, dimensions: v.dimensions, savedAt: new Date().toISOString() });
+      res.json({ ok: true, id, name: v.name, totalBlocks: v.totalBlocks });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  app.get('/bot-api/schematics', (req, res) => {
+    const list = Array.from(_schematicStore.values()).map((s) => ({
+      id: s.id, name: s.name, totalBlocks: s.totalBlocks, uniqueTypes: s.uniqueTypes,
+      blockCounts: s.blockCounts, dimensions: s.dimensions, savedAt: s.savedAt
+    }));
+    res.json({ ok: true, schematics: list, total: list.length });
+  });
+
+  app.delete('/bot-api/schematics/:id', (req, res) => {
+    const id = req.params.id;
+    if (!_schematicStore.has(id)) return res.status(404).json({ ok: false, error: 'Schematic not found' });
+    _schematicStore.delete(id);
+    res.json({ ok: true, deleted: id });
+  });
+
+  app.post('/bot-api/schematics/:id/deploy', (req, res) => {
+    const entry = _schematicStore.get(req.params.id);
+    if (!entry) return res.status(404).json({ ok: false, error: 'Schematic not found — it may have been removed' });
+    res.json({ ok: true, message: 'Deploying "' + entry.name + '" (' + entry.totalBlocks + ' blocks) across fleet — check the log for progress' });
+    fleetMgr.distributeBuild(entry.jsonData).catch((err) => {
+      botManager.log('[schematics] Deploy failed for "' + entry.name + '": ' + err.message);
     });
   });
 }
