@@ -2,6 +2,7 @@ const { goals } = require('mineflayer-pathfinder');
 const pathfinding = require('./pathfinding');
 const inventory = require('./inventory');
 const combat = require('./combat');
+const antiDetection = require('./antiDetection');
 // Note: hasAnyPickaxe / ensurePickaxe are exported from this file (defined below)
 
 const FOOD_ITEMS = [
@@ -231,7 +232,8 @@ async function mineBlockByName(bot, blockName, maxCount, onProgress) {
     if (typeof onProgress === 'function' && mined % 16 === 0 && mined < limit) {
       onProgress(mined);
     }
-    await wait(150);
+    // Jitter between digs — looks like a human pausing to check the block
+    await antiDetection.jitter(120, 480);
   }
 
   return { mined, reason: 'target_reached' };
@@ -265,7 +267,7 @@ async function mineAnyByNames(bot, names, maxCount) {
     const ok = await mineBlockObject(bot, block);
     if (!ok) break;
     mined++;
-    await wait(150);
+    await antiDetection.jitter(110, 450);
   }
   return mined;
 }

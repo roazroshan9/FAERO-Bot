@@ -20,6 +20,7 @@ const { attachAutoAuth } = require('../modules/autoAuth');
 const { KeepAlive }     = require('./keepAlive');
 const selfLearning      = require('../ai/selfLearning');
 const { FarmScheduler } = require('../modules/farming');
+const antiDetection     = require('../modules/antiDetection');
 
 class BotManager extends EventEmitter {
   constructor() {
@@ -161,6 +162,13 @@ class BotManager extends EventEmitter {
       this.keepAlive.attach(bot);
       this.log('[keepalive] watchdog attached');
 
+      // ── Anti-detection (idle behaviour + anti-AFK) ───────────────────────────
+      const stateManager = this.stateManager;
+      antiDetection.attach(bot, {
+        onLog:  (msg) => this.log(msg),
+        isIdle: ()    => !stateManager.isBusy()
+      });
+
       // ── Auto-farm scheduler (opt-in via AUTO_FARM=true env var) ─────────────
       if (String(process.env.AUTO_FARM || '').toLowerCase() === 'true') {
         this._farmScheduler.updateBot(bot);
@@ -281,6 +289,7 @@ class BotManager extends EventEmitter {
       this.stopBrain();
       try { this.keepAlive.detach(); } catch (_) {}
       try { this._farmScheduler.stop(); } catch (_) {}
+      try { antiDetection.detach(); } catch (_) {}
       this.bot = null;
       this.emit('bot', this.getStatus());
       if (this.shouldReconnect) {
