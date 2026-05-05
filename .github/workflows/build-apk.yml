@@ -58,7 +58,7 @@ jobs:
       # 7 ── Add Android platform ──────────────────────────────────────────────
       - name: Add Android platform
         working-directory: faero-mobile
-        run: npx cordova platform add android --allow-root
+        run: npx cordova platform remove android --allow-root || true; npx cordova platform add android --allow-root
 
       # 8 ── Add nodejs-mobile-cordova plugin ──────────────────────────────────
       - name: Add nodejs-mobile-cordova plugin
