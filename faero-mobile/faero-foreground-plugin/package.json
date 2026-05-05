@@ -1,0 +1,27 @@
+{
+  "name": "com.faero.foreground",
+  "version": "1.0.0",
+  "description": "FAERO persistent foreground service — keeps the Node.js bot alive when the screen is off",
+  "cordova": {
+    "id": "com.faero.foreground",
+    "platforms": ["android"]
+  },
+  "keywords": [
+    "cordova",
+    "cordova-android",
+    "ecosystem:cordova",
+    "foreground",
+    "service",
+    "notification",
+    "minecraft",
+    "faero"
+  ],
+  "engines": {
+    "cordovaDependencies": {
+      "1.0.0": {
+        "cordova-android": ">=10.0.0"
+      }
+    }
+  },
+  "license": "MIT"
+}
