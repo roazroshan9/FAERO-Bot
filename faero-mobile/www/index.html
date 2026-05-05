@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' data: gap: 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src *; img-src 'self' data:;">
+  <meta name="format-detection"        content="telephone=no">
+  <meta name="msapplication-tap-highlight" content="no">
+  <meta name="viewport" content="user-scalable=no, initial-scale=1, maximum-scale=1, width=device-width, viewport-fit=cover">
+  <title>FAERO Bot</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+  <!-- ── Boot Screen ─────────────────────────────────────────────────────── -->
+  <div id="bootScreen">
+    <div class="boot-inner">
+      <div class="boot-logo">FAERO</div>
+      <div class="boot-sub">AI MINECRAFT BOT CONTROLLER</div>
+      <div class="boot-spinner"></div>
+      <div id="bootStatus" class="boot-status">Initialising Node.js engine…</div>
+    </div>
+  </div>
+
+  <!-- ── Main App ────────────────────────────────────────────────────────── -->
+  <div id="app" style="display:none">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-logo">FAERO</div>
+      <div class="header-status">
+        <span id="connDot" class="conn-dot offline"></span>
+        <span id="connLabel">OFFLINE</span>
+      </div>
+      <button id="btnMenu" class="icon-btn">&#9776;</button>
+    </header>
+
+    <!-- Tab Bar -->
+    <nav class="tab-bar">
+      <button class="tab active" data-tab="connect">Connect</button>
+      <button class="tab" data-tab="controls">Controls</button>
+      <button class="tab" data-tab="status">Status</button>
+      <button class="tab" data-tab="logs">Logs</button>
+    </nav>
+
+    <!-- ── CONNECT TAB ─────────────────────────────────────────────────── -->
+    <section class="tab-panel active" id="tab-connect">
+      <div class="panel-card">
+        <div class="panel-eyebrow">SERVER CONNECTION</div>
+        <label>Server Host / IP
+          <input id="inHost" type="text" placeholder="mc.example.com" autocomplete="off" spellcheck="false">
+        </label>
+        <label>Port
+          <input id="inPort" type="number" value="25565" min="1" max="65535">
+        </label>
+        <label>Bot Username
+          <input id="inUsername" type="text" placeholder="faero_bot" autocomplete="off" spellcheck="false">
+        </label>
+        <label>Password <span class="optional">(cracked servers: leave blank)</span>
+          <input id="inPassword" type="password" placeholder="••••••••">
+        </label>
+        <label>MC Version <span class="optional">(blank = auto-detect)</span>
+          <input id="inVersion" type="text" placeholder="1.20.1" autocomplete="off">
+        </label>
+        <div class="btn-row">
+          <button id="btnConnect"    class="btn primary">Connect</button>
+          <button id="btnDisconnect" class="btn danger"  disabled>Disconnect</button>
+        </div>
+        <div id="connectError" class="error-msg" style="display:none"></div>
+      </div>
+    </section>
+
+    <!-- ── CONTROLS TAB ────────────────────────────────────────────────── -->
+    <section class="tab-panel" id="tab-controls">
+      <div class="panel-card">
+        <div class="panel-eyebrow">QUICK COMMANDS</div>
+        <div class="cmd-grid">
+          <button class="cmd-btn" data-cmd="mine"     data-args='{"mode":"auto"}'>⛏ Mine</button>
+          <button class="cmd-btn" data-cmd="farm"     data-args='{}'>🌾 Farm</button>
+          <button class="cmd-btn" data-cmd="followme" data-args='{}'>🚶 Follow</button>
+          <button class="cmd-btn" data-cmd="guard"    data-args='{}'>🛡 Guard</button>
+          <button class="cmd-btn" data-cmd="collect"  data-args='{}'>🎒 Collect</button>
+          <button class="cmd-btn" data-cmd="eat"      data-args='{}'>🍖 Eat</button>
+          <button class="cmd-btn" data-cmd="equip"    data-args='{}'>⚔ Equip</button>
+          <button class="cmd-btn" data-cmd="idle"     data-args='{}'>💤 Idle</button>
+          <button class="cmd-btn" data-cmd="stop"     data-args='{}'>🛑 Stop</button>
+          <button class="cmd-btn" data-cmd="home"     data-args='{}'>🏠 Home</button>
+        </div>
+      </div>
+      <div class="panel-card">
+        <div class="panel-eyebrow">CHAT / COMMAND</div>
+        <div class="chat-input-row">
+          <input id="inChat" type="text" placeholder="say hello / !mine / !waypoint save base">
+          <button id="btnSendChat" class="btn primary small">Send</button>
+        </div>
+        <div id="chatLog" class="chat-log"></div>
+      </div>
+    </section>
+
+    <!-- ── STATUS TAB ───────────────────────────────────────────────────── -->
+    <section class="tab-panel" id="tab-status">
+      <div class="panel-card">
+        <div class="panel-eyebrow">BOT STATUS</div>
+        <div class="stat-grid">
+          <div class="stat-item"><div class="stat-label">STATE</div>  <div class="stat-value" id="sState">—</div></div>
+          <div class="stat-item"><div class="stat-label">HEALTH</div> <div class="stat-value" id="sHealth">—</div></div>
+          <div class="stat-item"><div class="stat-label">FOOD</div>   <div class="stat-value" id="sFood">—</div></div>
+          <div class="stat-item"><div class="stat-label">DIM</div>    <div class="stat-value" id="sDim">—</div></div>
+          <div class="stat-item"><div class="stat-label">X</div>      <div class="stat-value" id="sPosX">—</div></div>
+          <div class="stat-item"><div class="stat-label">Y</div>      <div class="stat-value" id="sPosY">—</div></div>
+          <div class="stat-item"><div class="stat-label">Z</div>      <div class="stat-value" id="sPosZ">—</div></div>
+          <div class="stat-item"><div class="stat-label">USER</div>   <div class="stat-value" id="sUser">—</div></div>
+        </div>
+        <div id="statusBars" class="status-bars">
+          <div class="bar-row">
+            <span class="bar-label">HP</span>
+            <div class="bar-track"><div class="bar-fill health" id="barHealth" style="width:100%"></div></div>
+            <span class="bar-val" id="barHealthVal">20/20</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-label">FOOD</span>
+            <div class="bar-track"><div class="bar-fill food" id="barFood" style="width:100%"></div></div>
+            <span class="bar-val" id="barFoodVal">20/20</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── LOGS TAB ─────────────────────────────────────────────────────── -->
+    <section class="tab-panel" id="tab-logs">
+      <div class="panel-card logs-card">
+        <div class="panel-eyebrow">
+          EVENT STREAM
+          <button id="btnClearLogs" class="btn tiny">Clear</button>
+        </div>
+        <div id="logFeed" class="log-feed"></div>
+      </div>
+    </section>
+
+  </div><!-- /#app -->
+
+  <!-- Cordova runtime (injected at build time) -->
+  <script src="cordova.js"></script>
+  <!-- FAERO mobile app bridge -->
+  <script src="js/app.js"></script>
+</body>
+</html>

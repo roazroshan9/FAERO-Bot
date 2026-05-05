@@ -1,0 +1,39 @@
+{
+  "name": "com.faero.bot",
+  "displayName": "FaeroBot",
+  "version": "1.0.0",
+  "description": "FAERO — Advanced AI Minecraft Bot Controller (Cordova Android)",
+  "main": "index.js",
+  "scripts": {
+    "build":         "cordova build android",
+    "build:release": "cordova build android --release",
+    "build:debug":   "cordova build android --debug",
+    "run":           "cordova run android",
+    "emulate":       "cordova emulate android",
+    "platform:add":  "cordova platform add android",
+    "plugin:add":    "cordova plugin add nodejs-mobile-cordova",
+    "prepare":       "cordova prepare android",
+    "setup": "npm run platform:add && npm run plugin:add && echo 'Setup complete — ready to build'"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "cordova": "^12.0.0"
+  },
+  "cordova": {
+    "plugins": {
+      "nodejs-mobile-cordova": {}
+    },
+    "platforms": [
+      "android"
+    ]
+  },
+  "keywords": [
+    "ecosystem:cordova",
+    "cordova-android",
+    "faero",
+    "minecraft-bot",
+    "mineflayer"
+  ],
+  "author": "FAERO Team",
+  "license": "MIT"
+}
