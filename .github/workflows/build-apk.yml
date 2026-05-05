@@ -55,31 +55,33 @@ jobs:
         working-directory: faero-mobile/www/nodejs-project
         run: npm install --production
 
-      # 7 ── Add Android platform ──────────────────────────────────────────────
+      # 7 ── Add Android platform (Pinned to 11.0.0 for compatibility) ──────────
       - name: Add Android platform
         working-directory: faero-mobile
-        run: npx cordova platform remove android --allow-root || true; npx cordova platform add android --allow-root
+        run: |
+          npx cordova platform remove android --allow-root || true
+          npx cordova platform add android@11.0.0 --save --allow-root
 
-      # 8 ── Add nodejs-mobile-cordova plugin ──────────────────────────────────
-      - name: Add nodejs-mobile-cordova plugin
-        working-directory: faero-mobile
-        run: npx cordova plugin add nodejs-mobile-cordova
-
-      # 9 ── Add FAERO foreground service plugin (local path) ──────────────────
+      # 8 ── Add FAERO foreground service plugin FIRST (Prevents Manifest Conflict) ──
       - name: Add FAERO foreground service plugin
         working-directory: faero-mobile
-        run: npx cordova plugin add ./faero-foreground-plugin
+        run: npx cordova plugin add ./faero-foreground-plugin --allow-root
+
+      # 9 ── Add nodejs-mobile-cordova plugin SECOND ───────────────────────────
+      - name: Add nodejs-mobile-cordova plugin
+        working-directory: faero-mobile
+        run: npx cordova plugin add nodejs-mobile-cordova@0.3.2 --allow-root
 
       # 10 ── Build debug APK ───────────────────────────────────────────────────
       - name: Build debug APK
         working-directory: faero-mobile
-        run: npx cordova build android --debug
+        run: npx cordova build android --debug --allow-root
 
       # 11 ── Upload APK as a downloadable workflow artifact ───────────────────
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: faero-debug-apk-${{ github.sha }}
-          path: '**/build/outputs/apk/debug/*.apk'
+          path: faero-mobile/platforms/android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
           if-no-files-found: error
