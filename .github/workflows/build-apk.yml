@@ -1,0 +1,85 @@
+name: Build FAERO Android APK
+
+# ── Triggers ───────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'faero-mobile/**'
+      - '.github/workflows/build-apk.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'faero-mobile/**'
+  workflow_dispatch:   # allow manual runs from the Actions tab
+
+# ── Job ────────────────────────────────────────────────────────────────────────
+jobs:
+  build-apk:
+    name: Cordova Android Debug APK
+    runs-on: ubuntu-latest    # Ubuntu runners include Android SDK pre-installed
+
+    steps:
+
+      # 1 ── Source code ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2 ── Java 17 (Cordova / Gradle requirement) ────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # 3 ── Node.js 18 (Cordova CLI + nodejs-mobile) ──────────────────────────
+      - name: Set up Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      # 4 ── Accept Android SDK licences ────────────────────────────────────────
+      #      GitHub Ubuntu runners ship the SDK; we just need to accept licences.
+      - name: Accept Android SDK licences
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      # 5 ── Install Cordova (local, from faero-mobile/package.json) ───────────
+      - name: Install Cordova and project dependencies
+        working-directory: faero-mobile
+        run: npm install
+
+      # 6 ── Install nodejs-project backend dependencies ────────────────────────
+      #      nodejs-mobile bundles the entire nodejs-project/ folder into the APK,
+      #      including node_modules.  Must run BEFORE cordova build.
+      - name: Install bot backend dependencies
+        working-directory: faero-mobile/www/nodejs-project
+        run: npm install --production
+
+      # 7 ── Add Android platform ──────────────────────────────────────────────
+      - name: Add Android platform
+        working-directory: faero-mobile
+        run: npx cordova platform add android
+
+      # 8 ── Add nodejs-mobile-cordova plugin ──────────────────────────────────
+      - name: Add nodejs-mobile-cordova plugin
+        working-directory: faero-mobile
+        run: npx cordova plugin add nodejs-mobile-cordova
+
+      # 9 ── Add FAERO foreground service plugin (local path) ──────────────────
+      - name: Add FAERO foreground service plugin
+        working-directory: faero-mobile
+        run: npx cordova plugin add ./faero-foreground-plugin
+
+      # 10 ── Build debug APK ───────────────────────────────────────────────────
+      - name: Build debug APK
+        working-directory: faero-mobile
+        run: npx cordova build android --debug
+
+      # 11 ── Upload APK as a downloadable workflow artifact ───────────────────
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: faero-debug-apk-${{ github.sha }}
+          path: faero-mobile/platforms/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+          if-no-files-found: error

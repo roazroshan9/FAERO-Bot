@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
@@ -80,6 +81,7 @@ public class FaeroForegroundService extends Service {
 
             if (ACTION_STOP.equals(action)) {
                 Log.d(TAG, "ACTION_STOP received — stopping service");
+                saveRunningPref(false);   // clear boot-restart flag on clean stop
                 stopForeground(true);
                 stopSelf();
                 return START_NOT_STICKY;
@@ -91,6 +93,9 @@ public class FaeroForegroundService extends Service {
             if (intent.hasExtra("food"))      _food   = intent.getIntExtra("food",   _food);
             if (intent.hasExtra("server"))    _server = intent.getStringExtra("server");
             if (intent.hasExtra("dimension")) _dim    = intent.getStringExtra("dimension");
+
+            // Persist flag so FaeroBootReceiver can restart after device reboot
+            if (ACTION_START.equals(action)) saveRunningPref(true);
         }
 
         Notification notif = buildNotification();
@@ -116,6 +121,19 @@ public class FaeroForegroundService extends Service {
     public void onDestroy() {
         super.onDestroy();
         Log.d(TAG, "Service destroyed");
+    }
+
+    /**
+     * Persist "service was running" + last server address into SharedPreferences
+     * so FaeroBootReceiver can read it after the device reboots.
+     */
+    private void saveRunningPref(boolean running) {
+        SharedPreferences.Editor editor =
+            getSharedPreferences("faero_prefs", MODE_PRIVATE).edit();
+        editor.putBoolean("service_was_running", running);
+        editor.putString("last_server", running ? (_server != null ? _server : "") : "");
+        editor.apply();
+        Log.d(TAG, "saveRunningPref: running=" + running + " server=" + _server);
     }
 
     // ── Notification builder ──────────────────────────────────────────────

@@ -11,7 +11,7 @@
     "run":           "cordova run android",
     "emulate":       "cordova emulate android",
     "platform:add":  "cordova platform add android",
-    "plugin:add":    "cordova plugin add nodejs-mobile-cordova",
+    "plugin:add":    "cordova plugin add nodejs-mobile-cordova && cordova plugin add ./faero-foreground-plugin",
     "prepare":       "cordova prepare android",
     "setup": "npm run platform:add && npm run plugin:add && echo 'Setup complete — ready to build'"
   },

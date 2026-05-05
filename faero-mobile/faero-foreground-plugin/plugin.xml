@@ -53,10 +53,30 @@
                 android:stopWithTask="false" />
         </config-file>
 
+        <!--
+          Boot Receiver — restarts the foreground service after device reboot.
+          Reads the "service_was_running" SharedPreferences flag that
+          FaeroForegroundService writes whenever it starts or stops cleanly.
+        -->
+        <config-file target="AndroidManifest.xml" parent="/manifest/application">
+            <receiver
+                android:name="com.faero.foreground.FaeroBootReceiver"
+                android:enabled="true"
+                android:exported="true">
+                <intent-filter>
+                    <action android:name="android.intent.action.BOOT_COMPLETED" />
+                    <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                    <category android:name="android.intent.category.DEFAULT" />
+                </intent-filter>
+            </receiver>
+        </config-file>
+
         <!-- Java source files → copied into the Gradle project at build time -->
         <source-file src="src/android/FaeroForegroundService.java"
                      target-dir="src/com/faero/foreground" />
         <source-file src="src/android/FaeroForegroundPlugin.java"
+                     target-dir="src/com/faero/foreground" />
+        <source-file src="src/android/FaeroBootReceiver.java"
                      target-dir="src/com/faero/foreground" />
 
     </platform>
