@@ -19,6 +19,35 @@ function fmtTime(iso) {
   catch (_) { return ''; }
 }
 
+// ── Foreground service helpers ────────────────────────────────────────────────
+
+var _fgRunning = false;
+
+function fgStart(status) {
+  if (typeof FaeroForeground === 'undefined') return;
+  FaeroForeground.start(status || {});
+  _fgRunning = true;
+  setBgIndicator(true);
+}
+
+function fgUpdate(status) {
+  if (!_fgRunning || typeof FaeroForeground === 'undefined') return;
+  FaeroForeground.update(status || {});
+}
+
+function fgStop() {
+  if (typeof FaeroForeground === 'undefined') return;
+  FaeroForeground.stop();
+  _fgRunning = false;
+  setBgIndicator(false);
+}
+
+function setBgIndicator(active) {
+  var dot = document.getElementById('bgDot');
+  if (!dot) return;
+  dot.style.display = active ? 'inline-flex' : 'none';
+}
+
 // ── Cordova deviceready ───────────────────────────────────────────────────────
 
 document.addEventListener('deviceready', onDeviceReady, false);
@@ -118,12 +147,29 @@ function showApp() {
 
 function applyStatus(s) {
   if (!s) return;
+  var wasOnline = _botOnline;
   _botOnline = !!s.connected;
 
   var dot   = document.getElementById('connDot');
   var label = document.getElementById('connLabel');
   if (dot)   { dot.className   = 'conn-dot ' + (_botOnline ? 'online' : 'offline'); }
   if (label) { label.textContent = _botOnline ? 'ONLINE' : 'OFFLINE'; }
+
+  // ── Foreground service notification sync ─────────────────────────────
+  var fgPayload = {
+    state:     s.state     || 'IDLE',
+    health:    s.health    !== undefined ? s.health : 20,
+    food:      s.food      !== undefined ? s.food   : 20,
+    server:    s.server    || '',
+    dimension: s.dimension || 'overworld'
+  };
+  if (_botOnline && !_fgRunning) {
+    fgStart(fgPayload);                   // first connect → start the service
+  } else if (_botOnline && _fgRunning) {
+    fgUpdate(fgPayload);                  // already running → refresh notification
+  } else if (!_botOnline && _fgRunning) {
+    fgStop();                             // disconnect → dismiss notification
+  }
 
   setText('sState',  s.state      || '—');
   setText('sHealth', s.health     !== undefined ? s.health : '—');

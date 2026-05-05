@@ -46,13 +46,15 @@ class BotManagerStub {
   constructor() {
     this._connected = false;
     this._username  = null;
+    this._host      = '';
     this._logs      = [];
   }
 
   async connect(opts) {
     this._connected = true;
     this._username  = opts.username || 'faero';
-    this._log('Connected as ' + this._username + ' to ' + opts.host + ':' + (opts.port || 25565));
+    this._host      = (opts.host || 'localhost') + ':' + (opts.port || 25565);
+    this._log('Connected as ' + this._username + ' to ' + this._host);
   }
 
   disconnect() {
@@ -72,7 +74,8 @@ class BotManagerStub {
       food:       20,
       state:      this._connected ? 'IDLE' : 'OFFLINE',
       position:   null,
-      dimension:  'overworld'
+      dimension:  'overworld',
+      server:     this._host
     };
   }
 

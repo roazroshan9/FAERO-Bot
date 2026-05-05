@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin id="com.faero.foreground"
+        version="1.0.0"
+        xmlns="http://apache.org/cordova/ns/plugins/1.0"
+        xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <name>FaeroForeground</name>
+    <description>
+        FAERO persistent foreground service — keeps the Node.js bot alive when
+        the screen is off.  Shows a live status-bar notification with bot state,
+        HP, food, and server address.  Tap the notification to reopen the app;
+        tap "Disconnect" to stop the bot and dismiss the notification.
+    </description>
+    <license>MIT</license>
+    <keywords>cordova,android,foreground,service,notification,minecraft,faero</keywords>
+
+    <!-- ── JavaScript API ────────────────────────────────────────────────── -->
+    <!-- Exposed globally as window.FaeroForeground after deviceready        -->
+    <js-module src="www/FaeroForeground.js" name="FaeroForeground">
+        <clobbers target="FaeroForeground" />
+    </js-module>
+
+    <!-- ── Android ───────────────────────────────────────────────────────── -->
+    <platform name="android">
+
+        <!-- Register plugin in Cordova's generated config.xml -->
+        <config-file target="res/xml/config.xml" parent="/*">
+            <feature name="FaeroForeground">
+                <param name="android-package"
+                       value="com.faero.foreground.FaeroForegroundPlugin" />
+                <param name="onload" value="true" />
+            </feature>
+        </config-file>
+
+        <!-- Android permissions (safe to declare twice — Gradle deduplicates) -->
+        <config-file target="AndroidManifest.xml" parent="/manifest">
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+            <uses-permission android:name="android.permission.WAKE_LOCK" />
+            <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+        </config-file>
+
+        <!--
+          Service declaration.
+          android:stopWithTask="false" keeps the service alive even when the
+          user swipes the app out of the recents list.
+          foregroundServiceType="dataSync" satisfies API 34 requirements.
+        -->
+        <config-file target="AndroidManifest.xml" parent="/manifest/application">
+            <service
+                android:name="com.faero.foreground.FaeroForegroundService"
+                android:foregroundServiceType="dataSync"
+                android:exported="false"
+                android:stopWithTask="false" />
+        </config-file>
+
+        <!-- Java source files → copied into the Gradle project at build time -->
+        <source-file src="src/android/FaeroForegroundService.java"
+                     target-dir="src/com/faero/foreground" />
+        <source-file src="src/android/FaeroForegroundPlugin.java"
+                     target-dir="src/com/faero/foreground" />
+
+    </platform>
+
+</plugin>

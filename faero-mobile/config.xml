@@ -25,6 +25,11 @@
     <!-- Run: cordova plugin add nodejs-mobile-cordova                       -->
     <plugin name="nodejs-mobile-cordova" spec="~0.3.5" />
 
+    <!-- ── FAERO Foreground Service (local plugin — tracked in git) ──────── -->
+    <!-- Keeps the bot alive when the screen is off.                         -->
+    <!-- Run: cordova plugin add ./faero-foreground-plugin                   -->
+    <plugin name="com.faero.foreground" spec="./faero-foreground-plugin" />
+
     <!-- ── Android Platform ──────────────────────────────────────────────── -->
     <platform name="android">
         <allow-intent href="market:*" />

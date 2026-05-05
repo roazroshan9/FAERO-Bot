@@ -409,3 +409,27 @@ label input::placeholder { color: rgba(255,255,255,0.2); }
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0,255,255,0.2); border-radius: 2px; }
+
+/* ── Background Service indicator ────────────────────────────────────────── */
+/* Small "BG" badge shown in the header when the foreground service is live.  */
+.bg-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0,255,136,0.15);
+  border: 1px solid rgba(0,255,136,0.45);
+  color: #00ff88;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  animation: bgPulse 3s ease-in-out infinite;
+}
+
+@keyframes bgPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
