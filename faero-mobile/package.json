@@ -15,7 +15,9 @@
     "prepare":       "cordova prepare android",
     "setup": "npm run platform:add && npm run plugin:add && echo 'Setup complete — ready to build'"
   },
-  "dependencies": {},
+  "dependencies": {
+    "q": "^1.5.1"
+  },
   "devDependencies": {
     "cordova": "^12.0.0"
   },
