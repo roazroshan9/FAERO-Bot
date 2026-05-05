@@ -35,8 +35,12 @@
         <!-- Android permissions (safe to declare twice — Gradle deduplicates) -->
         <config-file target="AndroidManifest.xml" parent="/manifest">
             <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+            <!-- API 34+: required when foregroundServiceType="dataSync" is used -->
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
             <uses-permission android:name="android.permission.WAKE_LOCK" />
             <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+            <!-- API 33+ (Android 13): runtime permission to post notifications -->
+            <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
         </config-file>
 
         <!--
