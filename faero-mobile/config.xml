@@ -19,7 +19,7 @@
     <allow-intent href="mailto:*" />
     <allow-intent href="geo:*" />
 
-    <engine name="android" spec="~12.0.0" />
+   <engine name="android" spec="11.1.0" />
 
     <plugin name="nodejs-mobile-cordova" spec="~0.3.5" />
 
