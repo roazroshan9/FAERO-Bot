@@ -2,42 +2,23 @@
   "name": "com.faero.bot",
   "displayName": "FaeroBot",
   "version": "1.0.0",
-  "description": "FAERO — Advanced AI Minecraft Bot Controller (Cordova Android)",
+  "description": "FAERO Minecraft Bot Mobile App",
   "main": "index.js",
   "scripts": {
-    "build":         "cordova build android",
-    "build:release": "cordova build android --release",
-    "build:debug":   "cordova build android --debug",
-    "run":           "cordova run android",
-    "emulate":       "cordova emulate android",
-    "platform:add":  "cordova platform add android",
-    "plugin:add":    "cordova plugin add ./faero-foreground-plugin && cordova plugin add nodejs-mobile-cordova@0.3.2",
-    "prepare":       "cordova prepare android",
-    "setup": "npm run platform:add && npm run plugin:add && echo 'Setup complete — ready to build'"
+    "prepare": "cordova prepare android"
   },
+  "keywords": [
+    "ecosystem:cordova"
+  ],
+  "author": "Apache Cordova Team",
+  "license": "Apache-2.0",
   "dependencies": {
+    "cordova-android": "^11.0.0",
+    "com.faero.foreground": "file:plugins/com.faero.foreground",
+    "nodejs-mobile-cordova": "file:plugins/nodejs-mobile-cordova",
     "q": "^1.5.1"
   },
   "devDependencies": {
-    "cordova": "^12.0.0",
-    "cordova-lib": "^12.0.0"
-  },
-  "cordova": {
-    "plugins": {
-      "com.faero.foreground": {},
-      "nodejs-mobile-cordova": {}
-    },
-    "platforms": [
-      "android"
-    ]
-  },
-  "keywords": [
-    "ecosystem:cordova",
-    "cordova-android",
-    "faero",
-    "minecraft-bot",
-    "mineflayer"
-  ],
-  "author": "FAERO Team",
-  "license": "MIT"
+    "cordova-lib": "^11.0.0"
+  }
 }
