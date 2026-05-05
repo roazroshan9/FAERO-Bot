@@ -49,13 +49,6 @@
         <preference name="AllowInlineMediaPlayback"     value="true" />
         <preference name="AndroidInsecureFileModeAccess" value="true" />
 
-        <!-- App icons (replace with your own in res/android/) -->
-        <icon src="res/android/mipmap-mdpi/ic_launcher.png"    density="mdpi"    />
-        <icon src="res/android/mipmap-hdpi/ic_launcher.png"    density="hdpi"    />
-        <icon src="res/android/mipmap-xhdpi/ic_launcher.png"   density="xhdpi"   />
-        <icon src="res/android/mipmap-xxhdpi/ic_launcher.png"  density="xxhdpi"  />
-        <icon src="res/android/mipmap-xxxhdpi/ic_launcher.png" density="xxxhdpi" />
-
         <!-- Splash screens -->
         <splash src="res/android/drawable/splash.png" />
 
