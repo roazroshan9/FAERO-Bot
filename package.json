@@ -4,14 +4,15 @@
   "license": "MIT",
   "private": true,
   "main": "app.js",
+
   "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "start": "sh ./startup.sh",
     "bot": "node app.js",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
-    "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "build": "npm run typecheck",
+    "typecheck": "tsc --noEmit",
+    "prepare": "echo skipping auto cordova prepare"
   },
+
   "dependencies": {
     "discord.js": "^14.26.3",
     "dotenv": "^17.4.2",
@@ -27,8 +28,13 @@
     "mongoose": "^9.5.0",
     "socket.io": "^4.8.1",
     "socks": "^2.8.7",
-    "vec3": "^0.1.10"
+    "vec3": "^0.1.10",
+
+    "cordova": "^12.0.0",
+    "cordova-android": "^11.0.0",
+    "nodejs-mobile-cordova": "^0.3.2"
   },
+
   "devDependencies": {
     "prettier": "^3.8.1",
     "typescript": "~5.9.2"
