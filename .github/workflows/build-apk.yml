@@ -1,83 +1,100 @@
 name: Build FAERO Android APK
 
-# ── Triggers ───────────────────────────────────────────────────────────────────
 on:
   push:
     branches: [main]
     paths:
       - 'faero-mobile/**'
       - '.github/workflows/build-apk.yml'
+
   pull_request:
     branches: [main]
     paths:
       - 'faero-mobile/**'
-  workflow_dispatch:   # allow manual runs from the Actions tab
 
-# ── Job ────────────────────────────────────────────────────────────────────────
+  workflow_dispatch:
+
 jobs:
   build-apk:
     name: Cordova Android Debug APK
-    runs-on: ubuntu-latest    # Ubuntu runners include Android SDK pre-installed
+    runs-on: ubuntu-latest
 
     steps:
 
-      # 1 ── Source code ────────────────────────────────────────────────────────
+      # Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2 ── Java 17 (Cordova / Gradle requirement) ────────────────────────────
+      # Java 17
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      # 3 ── Node.js 18 (Cordova CLI + nodejs-mobile) ──────────────────────────
+      # Node.js 18
       - name: Set up Node.js 18
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # 4 ── Accept Android SDK licences ────────────────────────────────────────
-      #      GitHub Ubuntu runners ship the SDK; we just need to accept licences.
+      # Android SDK
       - name: Accept Android SDK licences
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        run: yes | sdkmanager --licenses || true
 
-      # 5 ── Install Cordova (local, from faero-mobile/package.json) ───────────
+      # Install Cordova globally + dependencies
       - name: Install Cordova and project dependencies
         working-directory: faero-mobile
-        run: npm install
+        run: |
+          npm install
+          npm install -g cordova
 
-      # 6 ── Install nodejs-project backend dependencies ────────────────────────
-      #      nodejs-mobile bundles the entire nodejs-project/ folder into the APK,
-      #      including node_modules.  Must run BEFORE cordova build.
+      # Verify Cordova
+      - name: Verify Cordova
+        run: cordova --version
+
+      # Install backend deps
       - name: Install bot backend dependencies
         working-directory: faero-mobile/www/nodejs-project
         run: npm install --production
 
-      # 7 ── Add Android platform (Pinned to 11.0.0 for compatibility) ──────────
+      # Clean Android platform
+      - name: Clean Android platform
+        working-directory: faero-mobile
+        run: |
+          cordova platform remove android --allow-root || true
+
+      # Add Android platform
       - name: Add Android platform
         working-directory: faero-mobile
         run: |
-          npx cordova platform remove android --allow-root || true
-          npx cordova platform add android@11.0.0 --save --allow-root
+          cordova platform add android@11.0.0 --save --allow-root
 
-      # 8 ── Add FAERO foreground service plugin FIRST (Prevents Manifest Conflict) ──
+      # Add foreground plugin
       - name: Add FAERO foreground service plugin
         working-directory: faero-mobile
-        run: npx cordova plugin add ./faero-foreground-plugin --allow-root
+        run: |
+          cordova plugin add ./faero-foreground-plugin --allow-root || true
 
-      # 9 ── Add nodejs-mobile-cordova plugin SECOND ───────────────────────────
+      # Add nodejs-mobile plugin
       - name: Add nodejs-mobile-cordova plugin
         working-directory: faero-mobile
-        run: npx cordova plugin add nodejs-mobile-cordova@0.3.2 --allow-root
+        run: |
+          cordova plugin add nodejs-mobile-cordova@0.3.2 --allow-root
 
-      # 10 ── Build debug APK ───────────────────────────────────────────────────
+      # Prepare project
+      - name: Prepare Cordova
+        working-directory: faero-mobile
+        run: |
+          cordova prepare android --allow-root
+
+      # Build APK
       - name: Build debug APK
         working-directory: faero-mobile
-        run: npx cordova build android --debug --allow-root
+        run: |
+          cordova build android --debug --allow-root
 
-      # 11 ── Upload APK as a downloadable workflow artifact ───────────────────
+      # Upload APK
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
